@@ -1,0 +1,7 @@
+// We need a Playlists index page when no ID is in URL
+// src/pages/PlaylistBuilder.jsx already handles /playlists/:id
+// When /playlists (no id), show the list + "create new" button
+
+// The existing PlaylistBuilder.jsx handles both routes.
+// This is a redirect file for documentation only.
+// App.jsx routes both /playlists and /playlists/:id to PlaylistBuilder.

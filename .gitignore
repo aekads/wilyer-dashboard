@@ -1,0 +1,33 @@
+﻿# Node modules
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+# Environment files
+.env
+.env.local
+.env.production
+
+# Build outputs
+dist/
+frontend/dist/
+backend/dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Package lock
+package-lock.json
+frontend/package-lock.json
+backend/package-lock.json

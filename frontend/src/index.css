@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: #b8d1e5 #eaf6fd;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #eaf6fd; }
+  ::-webkit-scrollbar-thumb { background: #b8d1e5; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #9bb7d1; }
+
+  html { @apply bg-[#eaf6fd] text-slate-800; }
+  body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  h1, h2, h3 { font-family: 'Syne', sans-serif; }
+}
+
+@layer components {
+  /* Glass card - light version with your bg */
+  .glass {
+    @apply bg-white/90 backdrop-blur-sm border border-white/50 shadow-sm;
+  }
+  .glass-hover {
+    @apply hover:bg-white hover:border-slate-200 hover:shadow-md transition-all duration-200;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-600 to-accent-cyan;
+  }
+  .gradient-text-purple {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-accent-purple to-accent-pink;
+  }
+
+  /* Glow border - subtle version */
+  .glow-border {
+    position: relative;
+  }
+  .glow-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background: linear-gradient(135deg, #3361ff0d, #00d4ff0d);
+    border-radius: inherit;
+    z-index: -1;
+  }
+
+  /* Shimmer skeleton - light version */
+  .skeleton {
+    @apply bg-slate-200 rounded-lg overflow-hidden relative;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.9) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* Status dot */
+  .status-online  { @apply w-2 h-2 rounded-full bg-accent-green shadow-[0_0_8px_#10b981]; }
+  .status-offline { @apply w-2 h-2 rounded-full bg-red-500; }
+  .status-idle    { @apply w-2 h-2 rounded-full bg-accent-orange; }
+
+  /* Nav item - light version for blue bg */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 transition-all duration-150 cursor-pointer;
+  }
+  .nav-item:hover { @apply bg-white/70 text-slate-900; }
+  .nav-item.active { @apply bg-brand-50 text-brand-700 shadow-inner-top; }
+  .nav-item.active svg { @apply text-brand-600; }
+
+  /* Button variants */
+  .btn-primary {
+    @apply flex items-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl transition-all duration-150 shadow-sm hover:shadow-md active:scale-95;
+  }
+  .btn-secondary {
+    @apply flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-xl border border-slate-200 shadow-sm transition-all duration-150 active:scale-95;
+  }
+  .btn-ghost {
+    @apply flex items-center gap-2 px-3 py-2 text-slate-600 hover:text-slate-900 text-sm font-medium rounded-lg transition-colors duration-150;
+  }
+  .btn-danger {
+    @apply flex items-center gap-2 px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium rounded-xl border border-red-200 transition-all duration-150;
+  }
+
+  /* Input - clean white on blue bg */
+  .input {
+    @apply w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all duration-150;
+  }
+  .input-label {
+    @apply block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2;
+  }
+
+  /* Badge - refined for light bg */
+  .badge-green  { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200; }
+  .badge-red    { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 text-xs font-semibold border border-red-200; }
+  .badge-yellow { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-semibold border border-amber-200; }
+  .badge-blue   { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 text-xs font-semibold border border-brand-200; }
+  .badge-purple { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 text-xs font-semibold border border-purple-200; }
+  .badge-gray   { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200; }
+
+  /* Table - clean for blue background */
+  .tbl { @apply w-full text-sm; }
+  .tbl th { @apply px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200; }
+  .tbl td { @apply px-4 py-4 border-b border-slate-100 text-slate-600; }
+  .tbl tr:hover td { @apply bg-white/70; }
+  .tbl tr:last-child td { @apply border-0; }
+
+  /* Modal backdrop - matches the blue theme */
+  .modal-backdrop {
+    @apply fixed inset-0 bg-[#eaf6fd]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in;
+  }
+  .modal-box {
+    @apply bg-white border border-slate-200 rounded-2xl shadow-lg w-full max-w-lg animate-slide-in-up;
+  }
+}
+
+/* Chart.js adjustments for light blue background */
+canvas { max-width: 100%; }
