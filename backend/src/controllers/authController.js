@@ -14,6 +14,7 @@ const { query, transaction } = require('../config/database');
 const { AppError }           = require('../middlewares/errorHandler');
 const { createAuditLog }     = require('../services/auditService');
 const { invalidateUserCache } = require('../middlewares/rbac');
+const { sendResetEmail }      = require('../services/emailService');
 const logger = require('../utils/logger');
 
 // ── Token Helpers ─────────────────────────────────────────────
