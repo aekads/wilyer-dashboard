@@ -33,7 +33,7 @@ const {
   getScreenLicenses,
   renewScreenLicense,
   changePassword,
-} = require('../controllers/settingsController');
+} = require('../controllers/SettingsController');
 
 const { authenticate }                        = require('../middlewares/auth');
 const { requirePermission, requireOrgAccess } = require('../middlewares/rbac');

@@ -1,7 +1,7 @@
 // src/routes/widgets.js
 const express = require('express');
 const router  = express.Router();
-const ctrl    = require('../controllers/widgetController');
+const ctrl    = require('../controllers/Widgetcontroller');
 const { authenticate }                          = require('../middlewares/auth');
 const { requirePermission, requireOrgAccess }   = require('../middlewares/rbac');
 const { authenticateDevice }                    = require('../middlewares/auth');
