@@ -4,8 +4,8 @@
   "description": "Aekads Digital Signage SaaS Platform - Backend API",
   "main": "src/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node src/server.js",           
+    "dev": "nodemon src/server.js", 
     "migrate": "node src/config/migrate.js",
     "seed": "node src/config/seed.js",
     "test": "jest --coverage",
