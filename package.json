@@ -5,8 +5,8 @@
     "node": "18.x"
   },
   "scripts": {
-    "start": "cd backend && node server.js",
-    "build": "cd frontend && npm ci --include=dev && npm run build",
+    "start": "cd backend && node src/server.js",
+    "build": "cd frontend && npm install && npm run build",
     "render-build": "npm run build",
     "postinstall": "cd backend && npm install"
   }
