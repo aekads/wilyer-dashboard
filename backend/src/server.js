@@ -54,9 +54,9 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
     },
   }));
 
-  // CORS configuration for single URL - UPDATED for production
+  // CORS configuration for single URL
   const allowedOrigins = process.env.NODE_ENV === 'production'
-    ? [process.env.FRONTEND_URL || 'https://wilyer-dashboard.onrender.com'] // Self-referential for single URL
+    ? [process.env.FRONTEND_URL || 'https://wilyer-dashboard.onrender.com']
     : ['http://localhost:5173', 'http://localhost:3000'];
 
   app.use(cors({
@@ -70,7 +70,7 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
-  // ── Rate Limiting Configuration (Your existing code) ────────
+  // ── Rate Limiting Configuration ──────────────────────────────
   class TieredRateLimiter {
     constructor() {
       this.stores = new Map();
@@ -169,7 +169,7 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
     };
   };
 
-  // Rate limiters configuration (Your existing code)
+  // Rate limiters configuration
   const rateLimiters = {
     global: createRateLimiter({
       windowMs: 60 * 1000,
@@ -413,14 +413,13 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
   // ── API Routes ───────────────────────────────────────────────
   app.use('/api', routes);
 
-  // ============== FIXED: Serve Static Frontend ==============
+  // ============== SERVE STATIC FRONTEND - UPDATED ==============
   // Serve static files from frontend dist in production
   if (process.env.NODE_ENV === 'production') {
-    // CRITICAL FIX: Correct path to frontend dist based on your folder structure
-    // Your structure shows: backend/server.js and frontend/dist
+    // Path to frontend build folder based on your structure
     const frontendDistPath = path.join(__dirname, '../frontend/dist');
     
-    // Log the path for debugging
+    // Log for debugging
     logger.info(`Looking for frontend build at: ${frontendDistPath}`);
     
     // Check if frontend dist exists
@@ -441,61 +440,101 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
           return next();
         }
         
-        // Serve index.html for client-side routing
+        // IMPORTANT: Serve index.html for ALL frontend routes
+        // This enables client-side routing (login, dashboard, etc.)
         res.sendFile(path.join(frontendDistPath, 'index.html'));
       });
       
-      logger.info(`✅ Serving static frontend from: ${frontendDistPath}`);
+      logger.info(`✅ Successfully serving frontend from: ${frontendDistPath}`);
+      logger.info(`✅ Root path (/) will serve the React app which should redirect to /login`);
     } else {
-      logger.error(`❌ Frontend dist NOT found at: ${frontendDistPath}`);
-      logger.error('Current directory:', __dirname);
-      logger.error('Parent directory contents:', fs.readdirSync(path.join(__dirname, '..')));
+      logger.error(`❌ Frontend build NOT found at: ${frontendDistPath}`);
       
-      // Try alternative path (in case structure is different)
-      const altPath = path.join(__dirname, '../../frontend/dist');
-      if (fs.existsSync(altPath)) {
-        logger.info(`✅ Found frontend at alternative path: ${altPath}`);
-        app.use(express.static(altPath));
-        
-        app.get('*', (req, res, next) => {
-          if (req.path.startsWith('/api') || req.path === '/health' || req.path === '/metrics') {
-            return next();
-          }
-          res.sendFile(path.join(altPath, 'index.html'));
-        });
-      } else {
-        // Fallback message
-        app.get('/', (req, res) => {
-          res.send(`
-            <html>
-              <head><title>Aekads API</title></head>
-              <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-                <h1>🚀 Aekads API is running</h1>
-                <p style="color: red;">Frontend not built or incorrect path.</p>
-                <p>Please build the frontend: <code>cd frontend && npm run build</code></p>
-                <p><a href="/api">View API</a> | <a href="/health">Health Check</a></p>
-              </body>
-            </html>
-          `);
-        });
-      }
+      // Fallback - Show API info but with note about frontend
+      app.get('/', (req, res) => {
+        res.send(`
+          <html>
+            <head>
+              <title>Aekads API</title>
+              <style>
+                body { font-family: sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+                .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                h1 { color: #333; }
+                .error { color: #e74c3c; }
+                .links { margin-top: 20px; }
+                .links a { display: inline-block; margin: 0 10px; padding: 10px 20px; background: #3498db; color: white; text-decoration: none; border-radius: 5px; }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <h1>🚀 Aekads API</h1>
+                <p class="error">⚠️ Frontend build not found</p>
+                <p>Please build the frontend first:</p>
+                <pre style="background: #f0f0f0; padding: 10px; border-radius: 5px;">cd frontend && npm run build</pre>
+                <div class="links">
+                  <a href="/api">API</a>
+                  <a href="/health">Health Check</a>
+                </div>
+              </div>
+            </body>
+          </html>
+        `);
+      });
+      
+      // Also handle any other route to show the same message
+      app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path === '/health' || req.path === '/metrics') {
+          return next();
+        }
+        res.redirect('/');
+      });
     }
   } else {
-    // Development mode - just show API is running
+    // Development mode - minimal message with redirect hint
     app.get('/', (req, res) => {
       res.send(`
         <html>
-          <head><title>Aekads API (Dev)</title></head>
-          <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-            <h1>🚀 Aekads API - Development Mode</h1>
-            <p>Frontend is running separately on <a href="http://localhost:5173">http://localhost:5173</a></p>
-            <p><a href="/api">View API</a> | <a href="/health">Health Check</a></p>
+          <head>
+            <title>Aekads API (Dev)</title>
+            <style>
+              body { font-family: sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+              .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+              h1 { color: #333; }
+              .note { color: #f39c12; }
+              .links { margin-top: 20px; }
+              .links a { display: inline-block; margin: 0 10px; padding: 10px 20px; background: #3498db; color: white; text-decoration: none; border-radius: 5px; }
+              .frontend-link { background: #27ae60; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>🚀 Aekads API - Development Mode</h1>
+              <p class="note">⚠️ This is the API server</p>
+              <p>For the frontend application, please use:</p>
+              <div class="links">
+                <a href="http://localhost:5173" class="frontend-link" target="_blank">Frontend (Port 5173)</a>
+                <a href="/api">API</a>
+                <a href="/health">Health Check</a>
+              </div>
+              <p style="margin-top: 20px; font-size: 0.9em; color: #666;">
+                In production, this page will automatically show the frontend application.
+              </p>
+            </div>
           </body>
         </html>
       `);
     });
+    
+    // In development, still handle other routes gracefully
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path === '/health' || req.path === '/metrics') {
+        return next();
+      }
+      // Redirect to frontend dev server for non-API routes in development
+      res.redirect('http://localhost:5173' + req.path);
+    });
   }
-  // ============== End Static Frontend Serving ==============
+  // ============== END STATIC FRONTEND SERVING ==============
 
   // ── Error Handling ───────────────────────────────────────────
   app.use((err, req, res, next) => {
@@ -520,6 +559,11 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
     logger.info(`📍 Single URL: ${process.env.NODE_ENV === 'production' ? 'https://wilyer-dashboard.onrender.com' : `http://localhost:${PORT}`}`);
     logger.info(`📚 API: /api`);
     logger.info(`❤️ Health: /health`);
+    if (process.env.NODE_ENV === 'production') {
+      logger.info(`✅ Frontend will be served at root path (/)`);
+    } else {
+      logger.info(`⚠️ Development mode - frontend runs on http://localhost:5173`);
+    }
   });
 
   // Graceful shutdown
