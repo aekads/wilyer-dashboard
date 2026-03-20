@@ -6,8 +6,8 @@
   },
   "scripts": {
     "start": "cd backend && node src/server.js",
-    "build": "cd frontend && npm install && npm run build",
+    "build": "cd frontend && NODE_ENV=development npm install && npm run build",
     "render-build": "npm run build",
-    "postinstall": "cd backend && npm install"
+    "postinstall": "cd backend && npm install --omit=dev"
   }
 }

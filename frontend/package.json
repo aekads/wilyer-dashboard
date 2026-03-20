@@ -11,11 +11,14 @@
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@react-google-maps/api": "^2.20.8",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
     "axios": "^1.6.2",
     "chart.js": "^4.4.1",
     "date-fns": "^3.0.6",
     "framer-motion": "^12.34.3",
     "lucide-react": "^0.303.0",
+    "postcss": "^8.4.32",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0",
@@ -23,13 +26,9 @@
     "react-hot-toast": "^2.4.1",
     "react-router-dom": "^6.21.0",
     "socket.io-client": "^4.6.2",
+    "tailwindcss": "^3.4.0",
+    "vite": "^5.0.10",
     "zustand": "^4.4.7"
   },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.32",
-    "tailwindcss": "^3.4.0",
-    "vite": "^5.0.10"
-  }
+  "devDependencies": {}
 }
