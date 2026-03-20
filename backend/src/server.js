@@ -54,9 +54,9 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
     },
   }));
 
-  // CORS configuration for single URL
+  // CORS configuration for single URL - UPDATED for production
   const allowedOrigins = process.env.NODE_ENV === 'production'
-    ? [process.env.FRONTEND_URL || 'https://aekads.onrender.com']
+    ? [process.env.FRONTEND_URL || 'https://wilyer-dashboard.onrender.com'] // Self-referential for single URL
     : ['http://localhost:5173', 'http://localhost:3000'];
 
   app.use(cors({
@@ -413,11 +413,15 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
   // ── API Routes ───────────────────────────────────────────────
   app.use('/api', routes);
 
-  // ============== NEW: Serve Static Frontend ==============
+  // ============== FIXED: Serve Static Frontend ==============
   // Serve static files from frontend dist in production
   if (process.env.NODE_ENV === 'production') {
-    // Path to frontend build folder
+    // CRITICAL FIX: Correct path to frontend dist based on your folder structure
+    // Your structure shows: backend/server.js and frontend/dist
     const frontendDistPath = path.join(__dirname, '../frontend/dist');
+    
+    // Log the path for debugging
+    logger.info(`Looking for frontend build at: ${frontendDistPath}`);
     
     // Check if frontend dist exists
     const fs = require('fs');
@@ -443,22 +447,38 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
       
       logger.info(`✅ Serving static frontend from: ${frontendDistPath}`);
     } else {
-      logger.warn(`⚠️ Frontend dist not found at: ${frontendDistPath}`);
-      logger.warn('Make sure to run "npm run build" in frontend folder');
+      logger.error(`❌ Frontend dist NOT found at: ${frontendDistPath}`);
+      logger.error('Current directory:', __dirname);
+      logger.error('Parent directory contents:', fs.readdirSync(path.join(__dirname, '..')));
       
-      // Fallback message
-      app.get('/', (req, res) => {
-        res.send(`
-          <html>
-            <head><title>Aekads API</title></head>
-            <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-              <h1>🚀 Aekads API is running</h1>
-              <p>Frontend not built yet. Please build the frontend first.</p>
-              <p><a href="/api">View API</a> | <a href="/health">Health Check</a></p>
-            </body>
-          </html>
-        `);
-      });
+      // Try alternative path (in case structure is different)
+      const altPath = path.join(__dirname, '../../frontend/dist');
+      if (fs.existsSync(altPath)) {
+        logger.info(`✅ Found frontend at alternative path: ${altPath}`);
+        app.use(express.static(altPath));
+        
+        app.get('*', (req, res, next) => {
+          if (req.path.startsWith('/api') || req.path === '/health' || req.path === '/metrics') {
+            return next();
+          }
+          res.sendFile(path.join(altPath, 'index.html'));
+        });
+      } else {
+        // Fallback message
+        app.get('/', (req, res) => {
+          res.send(`
+            <html>
+              <head><title>Aekads API</title></head>
+              <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+                <h1>🚀 Aekads API is running</h1>
+                <p style="color: red;">Frontend not built or incorrect path.</p>
+                <p>Please build the frontend: <code>cd frontend && npm run build</code></p>
+                <p><a href="/api">View API</a> | <a href="/health">Health Check</a></p>
+              </body>
+            </html>
+          `);
+        });
+      }
     }
   } else {
     // Development mode - just show API is running
@@ -497,9 +517,9 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
   
   server.listen(PORT, '0.0.0.0', () => {
     logger.info(`🚀 Aekads API running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
-    logger.info(`📍 Single URL: http://localhost:${PORT}`);
-    logger.info(`📚 API: http://localhost:${PORT}/api`);
-    logger.info(`❤️ Health: http://localhost:${PORT}/health`);
+    logger.info(`📍 Single URL: ${process.env.NODE_ENV === 'production' ? 'https://wilyer-dashboard.onrender.com' : `http://localhost:${PORT}`}`);
+    logger.info(`📚 API: /api`);
+    logger.info(`❤️ Health: /health`);
   });
 
   // Graceful shutdown
