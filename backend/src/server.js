@@ -56,7 +56,7 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
 
   // CORS configuration for single URL
   const allowedOrigins = process.env.NODE_ENV === 'production'
-    ? [process.env.FRONTEND_URL || 'https://wilyer-dashboard.onrender.com']
+    ? [process.env.FRONTEND_URL || 'https://wilyer-dashboard-mfcz.onrender.com']
     : ['http://localhost:5173', 'http://localhost:3000'];
 
   app.use(cors({
@@ -514,7 +514,7 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
   
   server.listen(PORT, '0.0.0.0', () => {
     logger.info(`🚀 Aekads running on port ${PORT}`);
-    logger.info(`📍 Single URL: ${process.env.NODE_ENV === 'production' ? 'https://wilyer-dashboard.onrender.com' : `http://localhost:${PORT}`}`);
+    logger.info(`📍 Single URL: ${process.env.NODE_ENV === 'production' ? 'https://wilyer-dashboard-mfcz.onrender.com' : `http://localhost:${PORT}`}`);
     logger.info(`📱 React app: / (root) - shows login page`);
     logger.info(`🔌 API: /api/*`);
   });
