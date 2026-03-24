@@ -49,10 +49,7 @@ const { getFullPlaylistData, buildPlayablePayload } = require('./playlistControl
 
 /** 6-char code shown on APK screen. Excludes ambiguous chars: 0/O, 1/I/L */
 const generatePairingCode = () => {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  return Array.from({ length: 6 }, () =>
-    chars[Math.floor(Math.random() * chars.length)]
-  ).join('');
+  return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 /** Signed device JWT valid for 1 year */
