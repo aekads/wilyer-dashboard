@@ -15,7 +15,7 @@ router.get('/:id',  requirePermission('playlists', 'read'),   ctrl.getPlaylist)
 router.patch('/:id', requirePermission('playlists', 'update'), ctrl.updatePlaylist)
 
 router.put('/:id/items',    requirePermission('playlists', 'update'),  ctrl.updatePlaylistItems)
-router.post('/:id/publish', requirePermission('playlists', 'publish'), ctrl.publishPlaylist)
+router.post('/:id/publish', ctrl.publishPlaylist)
 router.get('/:id/preview',  requirePermission('playlists', 'read'),    ctrl.previewPlaylist)
 router.get('/:id/versions', requirePermission('playlists', 'read'),    ctrl.getVersionHistory)
 router.delete('/:id',       requirePermission('playlists', 'delete'),  ctrl.deletePlaylist)
