@@ -16,7 +16,7 @@ const SYSTEM_ROLES = [
 export default function Users() {
   const [users, setUsers]         = useState([])
   const [roles, setRoles]         = useState([])
-  const [loading, setLoading]     = useState(true)
+  const [loading, setLoading]     = useState(true) 
   const [search, setSearch]       = useState('')
   const [inviteModal, setInviteModal] = useState(false)
   const [editModal, setEditModal] = useState(null)

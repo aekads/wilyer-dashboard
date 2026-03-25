@@ -1034,12 +1034,14 @@ const doSave = async () => {
     const savedId = await doSave()
     if (savedId) navigate(`/playlists/${savedId}/publish`)
   }
+const selectedLayout = layouts.find(l => l.id === selectedLayoutId) || layouts[0]
+const selectedLayoutZones = getZonesForLayout(selectedLayout?.orientation || orientation)
 
   const isPortrait = orientation !== 'horizontal'
   const CANVAS_W = isPortrait ? 240 : 420
   const CANVAS_H = isPortrait ? 427 : 236
-
-  const canvasGridStyle = {
+const selectedOri = selectedLayout?.orientation || orientation
+const canvasGridStyle = {
   display:              'grid',
   gap:                  '2px',
   background:           '#d1d5db',
@@ -1054,7 +1056,6 @@ const doSave = async () => {
                         : selectedOri === 'pip' ? '1fr'
                         : '1fr',
 }
-
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
