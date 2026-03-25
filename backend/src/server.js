@@ -57,9 +57,9 @@ if (cluster.isMaster && process.env.NODE_ENV === 'production' && process.env.ENA
   // CORS configuration for single URL
   const allowedOrigins = process.env.NODE_ENV === 'production'
     ? [process.env.FRONTEND_URL || 'https://wilyer-dashboard-mfcz.onrender.com']
-    : ['http://localhost:5173', 'http://localhost:3000'];
+    : ['http://localhost:5173', 'http://localhost:3000']; 
 
-  app.use(cors({
+  app.use(cors({ 
     origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

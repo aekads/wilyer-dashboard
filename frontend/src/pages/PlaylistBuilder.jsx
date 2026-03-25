@@ -34,15 +34,18 @@ function uid() {
 
 function getZonesForOrientation(ori) {
   if (ori === 'horizontal') return [
-    { id: 'zone-left', name: 'Left Zone' },
-    { id: 'zone-right', name: 'Right Zone' }
+    { id: 'zone-left',  name: 'Left Zone',  bounds: { x: 0,   y: 0, w: 50,  h: 100 } },
+    { id: 'zone-right', name: 'Right Zone', bounds: { x: 50,  y: 0, w: 50,  h: 100 } },
   ]
   if (ori === 'custom') return [
-    { id: 'zone-top', name: 'Top Zone' },
-    { id: 'zone-bottom-left', name: 'Bottom Left' },
-    { id: 'zone-bottom-right', name: 'Bottom Right' }
+    { id: 'zone-top',          name: 'Top Zone',          bounds: { x: 0,  y: 0,  w: 100, h: 50  } },
+    { id: 'zone-bottom-left',  name: 'Bottom Left Zone',  bounds: { x: 0,  y: 50, w: 50,  h: 50  } },
+    { id: 'zone-bottom-right', name: 'Bottom Right Zone', bounds: { x: 50, y: 50, w: 50,  h: 50  } },
   ]
-  return [{ id: 'zone-main', name: 'Main Zone' }]
+  // vertical (default) — single full-screen zone
+  return [
+    { id: 'zone-main', name: 'Main Zone', bounds: { x: 0, y: 0, w: 100, h: 100 } },
+  ]
 }
 
 function makeEmptyLayout(ori) {
@@ -50,13 +53,14 @@ function makeEmptyLayout(ori) {
   const items = {}
   zones.forEach(z => { items[z.id] = [] })
   return {
-    id: uid(),
-    name: 'New Layout',
+    id:          uid(),
+    name:        'New Layout',
     orientation: ori,
-    width: 1920,
-    height: 1080,
+    width:       1920,
+    height:      1080,
+    position:    0,
+    zoneBounds:  Object.fromEntries(zones.map(z => [z.id, z.bounds])), // ← ADD THIS
     items,
-    position: 0
   }
 }
 
@@ -675,71 +679,76 @@ export default function PlaylistBuilder() {
     if (activePanel === 'widgets' && widgetsList.length === 0) fetchWidgets()
   }, [activePanel])
 
-  const fetchPlaylist = async () => {
-    setLoading(true)
-    try {
-      const res = await playlistsAPI.getOne(id)
-      const d = res.data
+const fetchPlaylist = async () => {
+  setLoading(true)
+  try {
+    const res = await playlistsAPI.getOne(id)
+    const d = res.data
 
-      setName(d.name || 'Untitled Playlist')
+    setName(d.name || 'Untitled Playlist')
+    const ori = d.layout_type || 'vertical'
+    setOrientation(ori)
+    const zones = getZonesForOrientation(ori)
 
-      const ori = d.layout_type || 'vertical'
-      setOrientation(ori)
-      const zones = getZonesForOrientation(ori)
+    if (d.layouts && d.layouts.length > 0) {
+      const itemsByLayout = d.items_by_layout || {}
 
-      if (d.layouts && d.layouts.length > 0) {
-        const itemsByLayout = d.items_by_layout || {}
+      const loadedLayouts = d.layouts.map((layout, index) => {
+        const layoutItems = itemsByLayout[layout.id] || {}
+        const layoutZones = getZonesForOrientation(layout.orientation || ori)
 
-        const loadedLayouts = d.layouts.map((layout, index) => {
-          const layoutItems = itemsByLayout[layout.id] || {}
+        // Build zoneBounds: prefer stored zone_bounds, fallback to canonical
+        const zoneBounds = layout.zone_bounds
+          || Object.fromEntries(layoutZones.map(z => [z.id, z.bounds]))
 
-          const normalizedItems = {}
-          zones.forEach(z => {
-            normalizedItems[z.id] = (layoutItems[z.id] || []).map(item => ({
-              id:           item.id || uid(),
-              media_id:     item.media_id     || null,
-              widget_id:    item.widget_id    || null,
-              widget_type:  item.widget_type  || null,
-              widget_config: item.widget_config || {},
-              item_type:    item.item_type    || (item.widget_type ? 'widget' : 'media'),
-              duration:     item.duration     || 10,
-              bounds:       item.bounds       || { x: 0, y: 0, w: 100, h: 100 },
-              media_name:   item.media_name   || null,
-              secure_url:   item.secure_url   || null,
-              thumbnail_url: item.thumbnail_url || null,
-              resource_type: item.resource_type || null,
-            }))
-          })
-
-          return {
-            id:          layout.id,
-            name:        layout.name        || `Layout ${index + 1}`,
-            orientation: layout.orientation || ori,
-            width:       layout.width       || 1920,
-            height:      layout.height      || 1080,
-            position:    index,
-            items:       normalizedItems,
-          }
+        const normalizedItems = {}
+        layoutZones.forEach(z => {
+          normalizedItems[z.id] = (layoutItems[z.id] || []).map(item => ({
+            id:            item.id || uid(),
+            media_id:      item.media_id     || null,
+            widget_id:     item.widget_id    || null,
+            widget_type:   item.widget_type  || null,
+            widget_config: item.widget_config || {},
+            item_type:     item.item_type    || (item.widget_type ? 'widget' : 'media'),
+            duration:      item.duration     || 10,
+            bounds:        item.bounds       || { x: 0, y: 0, w: 100, h: 100 },
+            media_name:    item.media_name   || null,
+            secure_url:    item.secure_url   || null,
+            thumbnail_url: item.thumbnail_url || null,
+            resource_type: item.resource_type || null,
+          }))
         })
 
-        setLayouts(loadedLayouts)
-        setSelectedLayoutId(loadedLayouts[0]?.id)
-        setActiveZone(zones[0]?.id || 'zone-main')
-      } else {
-        const defaultLayout = makeEmptyLayout(ori)
-        setLayouts([defaultLayout])
-        setSelectedLayoutId(defaultLayout.id)
-        setActiveZone(zones[0]?.id || 'zone-main')
-      }
+        return {
+          id:          layout.id,
+          name:        layout.name        || `Layout ${index + 1}`,
+          orientation: layout.orientation || ori,
+          width:       layout.width       || 1920,
+          height:      layout.height      || 1080,
+          position:    index,
+          zoneBounds,          // ← restored
+          items:       normalizedItems,
+        }
+      })
 
-      setInitialized(true)
-    } catch (error) {
-      console.error('❌ Failed to load playlist:', error)
-      toast.error('Failed to load playlist')
-    } finally {
-      setLoading(false)
+      setLayouts(loadedLayouts)
+      setSelectedLayoutId(loadedLayouts[0]?.id)
+      setActiveZone(zones[0]?.id || 'zone-main')
+    } else {
+      const defaultLayout = makeEmptyLayout(ori)
+      setLayouts([defaultLayout])
+      setSelectedLayoutId(defaultLayout.id)
+      setActiveZone(zones[0]?.id || 'zone-main')
     }
+
+    setInitialized(true)
+  } catch (error) {
+    console.error('❌ Failed to load playlist:', error)
+    toast.error('Failed to load playlist')
+  } finally {
+    setLoading(false)
   }
+}
 
   const fetchMedia = async () => {
     setLoadingMedia(true)
@@ -885,76 +894,92 @@ export default function PlaylistBuilder() {
     }
   }, [addMediaToActive, addWidgetToActive])
 
-  const doSave = async () => {
-    if (!name.trim()) { toast.error('Playlist name required'); return null }
+const doSave = async () => {
+  if (!name.trim()) { toast.error('Playlist name required'); return null }
 
-    setSaving(true)
-    try {
-      const allItems = []
+  setSaving(true)
+  try {
+    const allItems = []
 
-      layouts.forEach((layout, layoutIdx) => {
-        Object.entries(layout.items || {}).forEach(([zoneId, zoneItems]) => {
-          zoneItems.forEach((item, itemIdx) => {
-            const position = (layoutIdx * 1000) + (itemIdx * 10)
+    layouts.forEach((layout, layoutIdx) => {
+      const zones = getZonesForOrientation(layout.orientation || orientation)
 
-            const widgetConfig = {
-              ...(item.widget_config || {}),
-              zoneId,
-              layoutId:    layout.id,
-              bounds:      item.bounds || { x: 0, y: 0, w: 100, h: 100 },
-              mediaName:    item.media_name    || null,
-              thumbnailUrl: item.thumbnail_url || null,
-              secureUrl:    item.secure_url    || null,
-              resourceType: item.resource_type || null,
-            }
+      Object.entries(layout.items || {}).forEach(([zoneId, zoneItems]) => {
+        // Get the canonical zone bounds (not item bounds)
+        const canonicalZone = zones.find(z => z.id === zoneId)
+        const zoneBounds = layout.zoneBounds?.[zoneId]
+          || canonicalZone?.bounds
+          || { x: 0, y: 0, w: 100, h: 100 }
 
-            allItems.push({
-              mediaId:      item.media_id    || null,
-              widgetId:     item.widget_id   || null,
-              widgetType:   item.widget_type || null,
-              widgetConfig,
-              position,
-              duration:     item.duration    || 10,
-            })
+        zoneItems.forEach((item, itemIdx) => {
+          const position = (layoutIdx * 1000) + (itemIdx * 10)
+
+          const widgetConfig = {
+            ...(item.widget_config || {}),
+            zoneId,
+            layoutId:    layout.id,
+            // Zone-level bounds (where zone sits on screen) — 0-100 scale
+            zoneBounds,
+            // Item-level bounds (where item sits inside zone) — 0-100 scale
+            bounds:      item.bounds || { x: 0, y: 0, w: 100, h: 100 },
+            mediaName:    item.media_name    || null,
+            thumbnailUrl: item.thumbnail_url || null,
+            secureUrl:    item.secure_url    || null,
+            resourceType: item.resource_type || null,
+          }
+
+          allItems.push({
+            mediaId:    item.media_id    || null,
+            widgetId:   item.widget_id   || null,
+            widgetType: item.widget_type || null,
+            widgetConfig,
+            position,
+            duration:   item.duration    || 10,
           })
         })
       })
+    })
 
-      const payload = {
-        name:        name.trim(),
-        layout_type: orientation,
-        layouts:     layouts.map((l, i) => ({
-          id:          l.id,
-          name:        l.name        || `Layout ${i + 1}`,
-          orientation: l.orientation || orientation,
-          width:       l.width       || 1920,
-          height:      l.height      || 1080,
-          position:    i,
-        })),
-      }
-
-      let finalId = id
-
-      if (!id) {
-        const res = await playlistsAPI.create(payload)
-        finalId = res.data.id
-        navigate(`/playlists/${finalId}/builder`, { replace: true })
-      } else {
-        await playlistsAPI.update(id, payload)
-      }
-
-      await playlistsAPI.updateItems(finalId, { items: allItems })
-
-      toast.success(id ? 'Playlist updated!' : 'Playlist created!')
-      return finalId
-    } catch (err) {
-      console.error('❌ Save failed:', err)
-      toast.error(err?.response?.data?.message || 'Failed to save')
-      return null
-    } finally {
-      setSaving(false)
+    const payload = {
+      name:        name.trim(),
+      layout_type: orientation,
+      layouts: layouts.map((l, i) => ({
+        id:          l.id,
+        name:        l.name        || `Layout ${i + 1}`,
+        orientation: l.orientation || orientation,
+        width:       l.width       || 1920,
+        height:      l.height      || 1080,
+        position:    i,
+        // Save zone bounds at layout level too
+        zone_bounds: l.zoneBounds
+          || Object.fromEntries(
+               getZonesForOrientation(l.orientation || orientation)
+                 .map(z => [z.id, z.bounds])
+             ),
+      })),
     }
+
+    let finalId = id
+    if (!id) {
+      const res = await playlistsAPI.create(payload)
+      finalId = res.data.id
+      navigate(`/playlists/${finalId}/builder`, { replace: true })
+    } else {
+      await playlistsAPI.update(id, payload)
+    }
+
+    await playlistsAPI.updateItems(finalId, { items: allItems })
+
+    toast.success(id ? 'Playlist updated!' : 'Playlist created!')
+    return finalId
+  } catch (err) {
+    console.error('❌ Save failed:', err)
+    toast.error(err?.response?.data?.message || 'Failed to save')
+    return null
+  } finally {
+    setSaving(false)
   }
+}
 
   const handleSave  = async () => { await doSave() }
   const handleNext  = async () => {

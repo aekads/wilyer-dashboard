@@ -300,16 +300,21 @@ const updatePlaylistItems = async (req, res, next) => {
       if (items.length > 0) {
         const rows = items.map((item, index) => {
           const pos = item.position !== undefined ? item.position : index * 10
-          const wConfig = {
-            ...(item.widgetConfig || {}),
-            zoneId:      item.widgetConfig?.zoneId  || 'zone-main',
-            layoutId:    item.widgetConfig?.layoutId || null,
-            bounds:      item.widgetConfig?.bounds   || { x: 0, y: 0, w: 100, h: 100 },
-            mediaName:    item.widgetConfig?.mediaName    || null,
-            thumbnailUrl: item.widgetConfig?.thumbnailUrl || null,
-            secureUrl:    item.widgetConfig?.secureUrl    || null,
-            resourceType: item.widgetConfig?.resourceType || null,
-          }
+         const wConfig = {
+  ...(item.widgetConfig || {}),
+  zoneId:      item.widgetConfig?.zoneId   || item.zoneId   || 'zone-main',
+  layoutId:    item.widgetConfig?.layoutId || item.layoutId || null,
+  bounds:      item.widgetConfig?.bounds   || { x: 0, y: 0, w: 100, h: 100 },
+  mediaName:    item.widgetConfig?.mediaName    || null,
+  thumbnailUrl: item.widgetConfig?.thumbnailUrl || null,
+  secureUrl:    item.widgetConfig?.secureUrl    || null,
+  resourceType: item.widgetConfig?.resourceType || null,
+}
+
+// Add this validation
+if (!item.widgetConfig?.zoneId && !item.zoneId) {
+  console.warn(`⚠️  [PLAYLIST] Item at position ${pos} has no zoneId — defaulting to zone-main`)
+}
           return [
             id,
             item.mediaId    || null,
@@ -620,9 +625,16 @@ const getFullPlaylistData = async (playlistId, orgId) => {
     if (!playlistRes.rows[0]) return null
 
     const pl      = playlistRes.rows[0]
-    const layouts = parseJsonField(pl.layouts, [])
-    const itemsByLayout = buildItemsByLayout(itemsRes.rows, layouts)
-    const totalDuration = itemsRes.rows.reduce((s, r) => s + (r.duration || 10), 0)
+    let layouts   = parseJsonField(pl.layouts, [])
+
+    // Enrich each layout with zone_bounds parsed from JSON
+    layouts = layouts.map(l => ({
+      ...l,
+      zone_bounds: parseJsonField(l.zone_bounds, null),
+    }))
+
+    const itemsByLayout   = buildItemsByLayout(itemsRes.rows, layouts)
+    const totalDuration   = itemsRes.rows.reduce((s, r) => s + (r.duration || 10), 0)
 
     return {
       id:              pl.id,
@@ -631,7 +643,7 @@ const getFullPlaylistData = async (playlistId, orgId) => {
       status:          pl.status,
       version:         pl.version || 1,
       layout_type:     pl.layout_type || 'vertical',
-      layouts,
+      layouts,                          // ← now includes zone_bounds per layout
       is_loop:         pl.is_loop !== false,
       transition_type: pl.transition_type || 'none',
       total_duration:  pl.total_duration || totalDuration,
@@ -708,6 +720,83 @@ const getFullPlaylistData = async (playlistId, orgId) => {
 //   }
 // }
 //
+
+
+// function buildPlayablePayload(playlistData, version) {
+//   const layouts       = playlistData.layouts        || []
+//   const itemsByLayout = playlistData.items_by_layout || {}
+
+//   const layoutObjectArrayList = layouts.map((layout, layoutIndex) => {
+//     const zonesMap = itemsByLayout[layout.id] || {}
+
+//     const zoneObjectArrayList = Object.entries(zonesMap).map(([zoneId, zoneItems]) => {
+//       // bounds: stored as 0–100 pct in DB → convert to 0.0–1.0 for APK
+//       const bounds = zoneItems[0]?.bounds || { x: 0, y: 0, w: 100, h: 100 }
+
+//       // mediaItems — EXACTLY the 6 fields the APK contract defines
+//       const mediaItems = zoneItems.map((item, idx) => ({
+//         mediaId:         String(item.id),
+//         mediaName:       item.media_name || item.widget_type || `item-${idx}`,
+//         mediaType:       resolveMediaType(item),
+//         mediaRemotePath: item.secure_url || item.widget_config?.url || null,
+//         mediaDuration:   (item.duration || 10) * 1000,  // seconds → ms
+//         mediaLocalPath:  null,
+//       }))
+
+//       return {
+//         zoneId:          String(zoneId),
+//         zoneName:        resolveZoneName(zoneId),
+//         zoneContentType: resolveZoneContentType(zoneItems),
+//         zoneConfig: {
+//           zoneWidth:     pctToFloat(bounds.w),
+//           zoneHeight:    pctToFloat(bounds.h),
+//           zonePositionX: pctToFloat(bounds.x),
+//           zonePositionY: pctToFloat(bounds.y),
+//           zonePositionZ: 0.0,
+//         },
+//         sequenceObject: {
+//           sequenceId:   `seq-${layout.id}-${zoneId}`,
+//           sequenceName: `Sequence ${resolveZoneName(zoneId)}`,
+//           mediaItems,
+//         },
+//         sequenceScheduleDataObjectArrayList: null,
+//         sequenceTriggerDataObjectArrayList:  null,
+//       }
+//     })
+
+//     return {
+//       layoutId:       String(layout.id),
+//       layoutName:     layout.name || `Layout ${layoutIndex + 1}`,
+//       layoutDuration: calcLayoutDuration(zonesMap),
+//       uiRotation:     resolveRotation(layout),
+//       zoneObjectArrayList,
+//       layoutScheduleDataObjectArrayList: null,
+//       layoutTriggerDataObjectArrayList:  null,
+//     }
+//   })
+
+//   // ── Root envelope — exactly matches APK contract ──────────────────────────
+//   return {
+//     type: 'playable_data',
+//     data: {
+//       playlistObjectArrayList: [
+//         {
+//           playlistId:    String(playlistData.id),
+//           playlistName:  playlistData.name,
+//           isLoop:        playlistData.is_loop !== false,
+//           transitionType: playlistData.transition_type || 'none',
+//           totalDuration: (playlistData.total_duration || 0) * 1000,  // seconds → ms
+//           layoutObjectArrayList,
+//           layoutScheduleDataObjectArrayList: null,
+//           layoutTriggerDataObjectArrayList:  null,
+//         }
+//       ],
+//       scheduleDataObjectArrayList: null,
+//     },
+//   }
+//   // NOTE: `version` is intentionally excluded from the APK payload.
+//   //       It is a server-side tracking field only.
+// }
 function buildPlayablePayload(playlistData, version) {
   const layouts       = playlistData.layouts        || []
   const itemsByLayout = playlistData.items_by_layout || {}
@@ -715,17 +804,36 @@ function buildPlayablePayload(playlistData, version) {
   const layoutObjectArrayList = layouts.map((layout, layoutIndex) => {
     const zonesMap = itemsByLayout[layout.id] || {}
 
-    const zoneObjectArrayList = Object.entries(zonesMap).map(([zoneId, zoneItems]) => {
-      // bounds: stored as 0–100 pct in DB → convert to 0.0–1.0 for APK
-      const bounds = zoneItems[0]?.bounds || { x: 0, y: 0, w: 100, h: 100 }
+    // Parse stored zone_bounds from the layout (saved by frontend doSave)
+    let layoutZoneBounds = {}
+    try {
+      const zb = layout.zone_bounds || layout.zoneBounds
+      if (zb) layoutZoneBounds = typeof zb === 'string' ? JSON.parse(zb) : zb
+    } catch (e) {}
 
-      // mediaItems — EXACTLY the 6 fields the APK contract defines
+    // Canonical zone bounds fallback based on orientation
+    const canonicalZones = getCanonicalZonesForOrientation(layout.orientation || 'vertical')
+    const canonicalBoundsMap = Object.fromEntries(canonicalZones.map(z => [z.id, z.bounds]))
+
+    const zoneObjectArrayList = Object.entries(zonesMap).map(([zoneId, zoneItems]) => {
+      if (!zoneItems || zoneItems.length === 0) return null
+
+      // Priority: stored widgetConfig.zoneBounds → layout.zone_bounds → canonical
+      const firstItem = zoneItems[0]
+      const wConfig = firstItem?.widget_config || {}
+
+      const zoneBounds =
+        wConfig.zoneBounds ||
+        layoutZoneBounds[zoneId] ||
+        canonicalBoundsMap[zoneId] ||
+        { x: 0, y: 0, w: 100, h: 100 }
+
       const mediaItems = zoneItems.map((item, idx) => ({
         mediaId:         String(item.id),
         mediaName:       item.media_name || item.widget_type || `item-${idx}`,
         mediaType:       resolveMediaType(item),
         mediaRemotePath: item.secure_url || item.widget_config?.url || null,
-        mediaDuration:   (item.duration || 10) * 1000,  // seconds → ms
+        mediaDuration:   (item.duration || 10) * 1000,
         mediaLocalPath:  null,
       }))
 
@@ -734,10 +842,10 @@ function buildPlayablePayload(playlistData, version) {
         zoneName:        resolveZoneName(zoneId),
         zoneContentType: resolveZoneContentType(zoneItems),
         zoneConfig: {
-          zoneWidth:     pctToFloat(bounds.w),
-          zoneHeight:    pctToFloat(bounds.h),
-          zonePositionX: pctToFloat(bounds.x),
-          zonePositionY: pctToFloat(bounds.y),
+          zoneWidth:     pctToFloat(zoneBounds.w),
+          zoneHeight:    pctToFloat(zoneBounds.h),
+          zonePositionX: pctToFloat(zoneBounds.x),
+          zonePositionY: pctToFloat(zoneBounds.y),
           zonePositionZ: 0.0,
         },
         sequenceObject: {
@@ -748,7 +856,7 @@ function buildPlayablePayload(playlistData, version) {
         sequenceScheduleDataObjectArrayList: null,
         sequenceTriggerDataObjectArrayList:  null,
       }
-    })
+    }).filter(Boolean) // remove null (empty zones)
 
     return {
       layoutId:       String(layout.id),
@@ -761,27 +869,38 @@ function buildPlayablePayload(playlistData, version) {
     }
   })
 
-  // ── Root envelope — exactly matches APK contract ──────────────────────────
   return {
     type: 'playable_data',
     data: {
-      playlistObjectArrayList: [
-        {
-          playlistId:    String(playlistData.id),
-          playlistName:  playlistData.name,
-          isLoop:        playlistData.is_loop !== false,
-          transitionType: playlistData.transition_type || 'none',
-          totalDuration: (playlistData.total_duration || 0) * 1000,  // seconds → ms
-          layoutObjectArrayList,
-          layoutScheduleDataObjectArrayList: null,
-          layoutTriggerDataObjectArrayList:  null,
-        }
-      ],
+      playlistObjectArrayList: [{
+        playlistId:    String(playlistData.id),
+        playlistName:  playlistData.name,
+        isLoop:        playlistData.is_loop !== false,
+        transitionType: playlistData.transition_type || 'none',
+        totalDuration: (playlistData.total_duration || 0) * 1000,
+        layoutObjectArrayList,
+        layoutScheduleDataObjectArrayList: null,
+        layoutTriggerDataObjectArrayList:  null,
+      }],
       scheduleDataObjectArrayList: null,
     },
   }
-  // NOTE: `version` is intentionally excluded from the APK payload.
-  //       It is a server-side tracking field only.
+}
+
+// ADD this new helper — canonical zone bounds by orientation
+function getCanonicalZonesForOrientation(orientation) {
+  if (orientation === 'horizontal') return [
+    { id: 'zone-left',         bounds: { x: 0,  y: 0,  w: 50,  h: 100 } },
+    { id: 'zone-right',        bounds: { x: 50, y: 0,  w: 50,  h: 100 } },
+  ]
+  if (orientation === 'custom') return [
+    { id: 'zone-top',          bounds: { x: 0,  y: 0,  w: 100, h: 50  } },
+    { id: 'zone-bottom-left',  bounds: { x: 0,  y: 50, w: 50,  h: 50  } },
+    { id: 'zone-bottom-right', bounds: { x: 50, y: 50, w: 50,  h: 50  } },
+  ]
+  return [
+    { id: 'zone-main',         bounds: { x: 0,  y: 0,  w: 100, h: 100 } },
+  ]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
