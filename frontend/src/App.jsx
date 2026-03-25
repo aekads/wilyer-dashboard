@@ -40,7 +40,7 @@ export default function App() {
   useEffect(() => {
     const init = async () => {
       await initialize()
-      setInitAttempted(true)
+      setInitAttempted(true)   
     }
     init()
   }, [])

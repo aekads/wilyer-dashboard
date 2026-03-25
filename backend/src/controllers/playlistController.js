@@ -19,12 +19,13 @@ const createPlaylist = async (req, res, next) => {
     if (!name?.trim()) throw new AppError('Playlist name is required', 400)
 
     const layoutsJson = layouts ? JSON.stringify(layouts.map((l, index) => ({
-      id: l.id,
-      name: l.name || `Layout ${index + 1}`,
+      id:          l.id,
+      name:        l.name || `Layout ${index + 1}`,
       orientation: l.orientation || layout_type || 'vertical',
-      width: l.width || 1920,
-      height: l.height || 1080,
-      position: index
+      width:       l.width  || 1920,
+      height:      l.height || 1080,
+      position:    index,
+      zone_bounds: l.zone_bounds || null,   // ← SAVE zone_bounds
     }))) : '[]'
 
     const result = await query(`
@@ -44,20 +45,13 @@ const createPlaylist = async (req, res, next) => {
     ])
 
     const playlist = result.rows[0]
-
-    await createAuditLog({
-      orgId, userId, action: 'playlist.create',
-      entityType: 'playlist', entityId: playlist.id,
-      newValues: { name }
-    })
-
+    await createAuditLog({ orgId, userId, action: 'playlist.create', entityType: 'playlist', entityId: playlist.id, newValues: { name } })
     res.status(201).json({ success: true, data: playlist })
   } catch (err) {
     console.error('Create playlist error:', err)
     next(err)
   }
 }
-
 // ─── PATCH /api/playlists/:id ─────────────────────────────────────────────────
 const updatePlaylist = async (req, res, next) => {
   try {
@@ -68,12 +62,13 @@ const updatePlaylist = async (req, res, next) => {
     let layoutsJson = null
     if (layouts) {
       layoutsJson = JSON.stringify(layouts.map((l, index) => ({
-        id: l.id,
-        name: l.name || `Layout ${index + 1}`,
+        id:          l.id,
+        name:        l.name || `Layout ${index + 1}`,
         orientation: l.orientation || layout_type || 'vertical',
-        width: l.width || 1920,
-        height: l.height || 1080,
-        position: index
+        width:       l.width  || 1920,
+        height:      l.height || 1080,
+        position:    index,
+        zone_bounds: l.zone_bounds || null,   // ← SAVE zone_bounds
       })))
     }
 
@@ -102,13 +97,7 @@ const updatePlaylist = async (req, res, next) => {
     ])
 
     if (!result.rows[0]) throw new AppError('Playlist not found', 404)
-
-    await createAuditLog({
-      orgId, userId, action: 'playlist.update',
-      entityType: 'playlist', entityId: id,
-      newValues: { name, layout_type }
-    })
-
+    await createAuditLog({ orgId, userId, action: 'playlist.update', entityType: 'playlist', entityId: id, newValues: { name, layout_type } })
     res.json({ success: true, data: result.rows[0] })
   } catch (err) {
     console.error('Update playlist error:', err)
@@ -228,14 +217,21 @@ const getPlaylist = async (req, res, next) => {
 
     let layouts = parseJsonField(playlist.layouts, [])
 
+    // Parse zone_bounds in each layout
+    layouts = layouts.map(l => ({
+      ...l,
+      zone_bounds: parseJsonField(l.zone_bounds, null),
+    }))
+
     if (layouts.length === 0 && playlist.layout_type) {
       layouts = [{
-        id: `layout-default`,
-        name: 'Main Layout',
+        id:          'layout-default',
+        name:        'Main Layout',
         orientation: playlist.layout_type,
-        width: 1920,
-        height: 1080,
-        position: 0
+        width:       1920,
+        height:      1080,
+        position:    0,
+        zone_bounds: null,
       }]
     }
 
@@ -277,7 +273,6 @@ const getPlaylist = async (req, res, next) => {
     next(err)
   }
 }
-
 // ─── PUT /api/playlists/:id/items ─────────────────────────────────────────────
 const updatePlaylistItems = async (req, res, next) => {
   try {
@@ -624,17 +619,30 @@ const getFullPlaylistData = async (playlistId, orgId) => {
 
     if (!playlistRes.rows[0]) return null
 
-    const pl      = playlistRes.rows[0]
-    let layouts   = parseJsonField(pl.layouts, [])
+    const pl = playlistRes.rows[0]
+    let layouts = parseJsonField(pl.layouts, [])
 
-    // Enrich each layout with zone_bounds parsed from JSON
+    // Parse zone_bounds for each layout
     layouts = layouts.map(l => ({
       ...l,
       zone_bounds: parseJsonField(l.zone_bounds, null),
     }))
 
-    const itemsByLayout   = buildItemsByLayout(itemsRes.rows, layouts)
-    const totalDuration   = itemsRes.rows.reduce((s, r) => s + (r.duration || 10), 0)
+    // Fallback if no layouts saved
+    if (layouts.length === 0) {
+      layouts = [{
+        id:          'layout-default',
+        name:        'Main Layout',
+        orientation: pl.layout_type || 'vertical',
+        width:       1920,
+        height:      1080,
+        position:    0,
+        zone_bounds: null,
+      }]
+    }
+
+    const itemsByLayout = buildItemsByLayout(itemsRes.rows, layouts)
+    const totalDuration = itemsRes.rows.reduce((s, r) => s + (r.duration || 10), 0)
 
     return {
       id:              pl.id,
@@ -643,7 +651,7 @@ const getFullPlaylistData = async (playlistId, orgId) => {
       status:          pl.status,
       version:         pl.version || 1,
       layout_type:     pl.layout_type || 'vertical',
-      layouts,                          // ← now includes zone_bounds per layout
+      layouts,
       is_loop:         pl.is_loop !== false,
       transition_type: pl.transition_type || 'none',
       total_duration:  pl.total_duration || totalDuration,
@@ -655,7 +663,6 @@ const getFullPlaylistData = async (playlistId, orgId) => {
     return null
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // APK PAYLOAD BUILDER
 // ─────────────────────────────────────────────────────────────────────────────
@@ -800,27 +807,28 @@ const getFullPlaylistData = async (playlistId, orgId) => {
 
 function getCanonicalZoneBounds(orientation) {
   const presets = {
-    'vertical':   { 'zone-main':         { x: 0,  y: 0,  w: 100, h: 100 } },
+    'vertical':   { 'zone-main':          { x: 0,  y: 0,  w: 100, h: 100 } },
     'horizontal': {
-      'zone-left':          { x: 0,  y: 0,  w: 50,  h: 100 },
-      'zone-right':         { x: 50, y: 0,  w: 50,  h: 100 },
+      'zone-left':           { x: 0,  y: 0,  w: 50,  h: 100 },
+      'zone-right':          { x: 50, y: 0,  w: 50,  h: 100 },
     },
     'top-bottom': {
-      'zone-top':           { x: 0,  y: 0,  w: 100, h: 50  },
-      'zone-bottom':        { x: 0,  y: 50, w: 100, h: 50  },
+      'zone-top':            { x: 0,  y: 0,  w: 100, h: 50  },
+      'zone-bottom':         { x: 0,  y: 50, w: 100, h: 50  },
     },
     'custom': {
-      'zone-top':           { x: 0,  y: 0,  w: 100, h: 50  },
-      'zone-bottom-left':   { x: 0,  y: 50, w: 50,  h: 50  },
-      'zone-bottom-right':  { x: 50, y: 50, w: 50,  h: 50  },
+      'zone-top':            { x: 0,  y: 0,  w: 100, h: 50  },
+      'zone-bottom-left':    { x: 0,  y: 50, w: 50,  h: 50  },
+      'zone-bottom-right':   { x: 50, y: 50, w: 50,  h: 50  },
     },
     'pip': {
-      'zone-main':          { x: 0,  y: 0,  w: 100, h: 100 },
-      'zone-pip':           { x: 65, y: 60, w: 30,  h: 35  },
+      'zone-main':           { x: 0,  y: 0,  w: 100, h: 100 },
+      'zone-pip':            { x: 65, y: 60, w: 30,  h: 35  },
     },
   }
   return presets[orientation] || presets['vertical']
 }
+
 function buildPlayablePayload(playlistData, version) {
   const layouts       = playlistData.layouts        || []
   const itemsByLayout = playlistData.items_by_layout || {}
@@ -828,34 +836,39 @@ function buildPlayablePayload(playlistData, version) {
   const layoutObjectArrayList = layouts.map((layout, layoutIndex) => {
     const zonesMap = itemsByLayout[layout.id] || {}
 
-    // 1. Parse zone_bounds stored on the layout (saved by frontend)
+    // 1. zone_bounds stored on layout (now actually saved!)
     let storedZoneBounds = {}
     try {
-      const zb = layout.zone_bounds || layout.zoneBounds
+      const zb = layout.zone_bounds
       if (zb) storedZoneBounds = typeof zb === 'string' ? JSON.parse(zb) : zb
     } catch (e) {}
 
-    // 2. Canonical fallback based on layout orientation
+    // 2. Canonical fallback
     const canonicalZoneBounds = getCanonicalZoneBounds(layout.orientation || 'vertical')
 
-    // 3. Merge: stored wins over canonical
+    // 3. Merge: stored wins
     const resolvedZoneBounds = { ...canonicalZoneBounds, ...storedZoneBounds }
 
-    // 4. Build zoneObjectArrayList — only zones that have items
+    console.log(`[PAYLOAD] Layout "${layout.name}" orientation="${layout.orientation}"`)
+    console.log(`[PAYLOAD] zones in DB:`, Object.keys(zonesMap))
+    console.log(`[PAYLOAD] resolvedZoneBounds:`, resolvedZoneBounds)
+
+    // 4. Build zones — only zones with items
     const zoneObjectArrayList = Object.entries(zonesMap)
       .filter(([, zoneItems]) => zoneItems && zoneItems.length > 0)
       .map(([zoneId, zoneItems]) => {
 
-        // Zone bounds: stored in widgetConfig.zoneBounds OR layout-level OR canonical
+        // Zone bounds priority: widgetConfig.zoneBounds > layout zone_bounds > canonical
         const firstItemConfig = zoneItems[0]?.widget_config || {}
+        const wConfigZoneBounds = firstItemConfig.zoneBounds
         const zoneBounds =
-          (firstItemConfig.zoneBounds &&
-            typeof firstItemConfig.zoneBounds === 'object' &&
-            firstItemConfig.zoneBounds.w
-              ? firstItemConfig.zoneBounds
-              : null)
+          (wConfigZoneBounds && typeof wConfigZoneBounds === 'object' && wConfigZoneBounds.w
+            ? wConfigZoneBounds
+            : null)
           || resolvedZoneBounds[zoneId]
           || { x: 0, y: 0, w: 100, h: 100 }
+
+        console.log(`[PAYLOAD]   Zone "${zoneId}" bounds:`, zoneBounds, `items: ${zoneItems.length}`)
 
         const mediaItems = zoneItems.map((item, idx) => ({
           mediaId:         String(item.id),
@@ -915,7 +928,6 @@ function buildPlayablePayload(playlistData, version) {
     },
   }
 }
-
 // ADD this new helper — canonical zone bounds by orientation
 function getCanonicalZonesForOrientation(orientation) {
   if (orientation === 'horizontal') return [

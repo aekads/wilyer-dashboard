@@ -839,15 +839,17 @@ const changeLayoutOrientation = (newOri) => {
   toast('Zone layout changed — items reset for this layout')
 }
 
-  const deleteLayout = (layoutId) => {
-    if (layouts.length === 1) { toast.error('At least one layout required'); return }
-    const remaining = layouts.filter(l => l.id !== layoutId)
-    setLayouts(remaining)
-    if (selectedLayoutId === layoutId) {
-      setSelectedLayoutId(remaining[0]?.id || null)
-      setActiveZone(currentZones[0].id)
-    }
+ const deleteLayout = (layoutId) => {
+  if (layouts.length === 1) { toast.error('At least one layout required'); return }
+  const remaining = layouts.filter(l => l.id !== layoutId)
+  setLayouts(remaining)
+  if (selectedLayoutId === layoutId) {
+    const nextLayout = remaining[0]
+    setSelectedLayoutId(nextLayout?.id || null)
+    const nextZones = getZonesForLayout(nextLayout?.orientation || orientation)
+    setActiveZone(nextZones[0]?.id || 'zone-main')
   }
+}
 
   const changeOrientation = (newOri) => {
     const newZones = getZonesForOrientation(newOri)
