@@ -1458,7 +1458,8 @@ export default function PlaylistBuilder() {
             )}
           </div>
         )}
-      </DragOverlay>
+      {/* </DragOverlay> */}
+         </DragOverlay>
     </DndContext>
   )
 }
