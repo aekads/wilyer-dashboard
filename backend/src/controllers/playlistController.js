@@ -797,6 +797,30 @@ const getFullPlaylistData = async (playlistId, orgId) => {
 //   // NOTE: `version` is intentionally excluded from the APK payload.
 //   //       It is a server-side tracking field only.
 // }
+
+function getCanonicalZoneBounds(orientation) {
+  const presets = {
+    'vertical':   { 'zone-main':         { x: 0,  y: 0,  w: 100, h: 100 } },
+    'horizontal': {
+      'zone-left':          { x: 0,  y: 0,  w: 50,  h: 100 },
+      'zone-right':         { x: 50, y: 0,  w: 50,  h: 100 },
+    },
+    'top-bottom': {
+      'zone-top':           { x: 0,  y: 0,  w: 100, h: 50  },
+      'zone-bottom':        { x: 0,  y: 50, w: 100, h: 50  },
+    },
+    'custom': {
+      'zone-top':           { x: 0,  y: 0,  w: 100, h: 50  },
+      'zone-bottom-left':   { x: 0,  y: 50, w: 50,  h: 50  },
+      'zone-bottom-right':  { x: 50, y: 50, w: 50,  h: 50  },
+    },
+    'pip': {
+      'zone-main':          { x: 0,  y: 0,  w: 100, h: 100 },
+      'zone-pip':           { x: 65, y: 60, w: 30,  h: 35  },
+    },
+  }
+  return presets[orientation] || presets['vertical']
+}
 function buildPlayablePayload(playlistData, version) {
   const layouts       = playlistData.layouts        || []
   const itemsByLayout = playlistData.items_by_layout || {}
@@ -804,59 +828,64 @@ function buildPlayablePayload(playlistData, version) {
   const layoutObjectArrayList = layouts.map((layout, layoutIndex) => {
     const zonesMap = itemsByLayout[layout.id] || {}
 
-    // Parse stored zone_bounds from the layout (saved by frontend doSave)
-    let layoutZoneBounds = {}
+    // 1. Parse zone_bounds stored on the layout (saved by frontend)
+    let storedZoneBounds = {}
     try {
       const zb = layout.zone_bounds || layout.zoneBounds
-      if (zb) layoutZoneBounds = typeof zb === 'string' ? JSON.parse(zb) : zb
+      if (zb) storedZoneBounds = typeof zb === 'string' ? JSON.parse(zb) : zb
     } catch (e) {}
 
-    // Canonical zone bounds fallback based on orientation
-    const canonicalZones = getCanonicalZonesForOrientation(layout.orientation || 'vertical')
-    const canonicalBoundsMap = Object.fromEntries(canonicalZones.map(z => [z.id, z.bounds]))
+    // 2. Canonical fallback based on layout orientation
+    const canonicalZoneBounds = getCanonicalZoneBounds(layout.orientation || 'vertical')
 
-    const zoneObjectArrayList = Object.entries(zonesMap).map(([zoneId, zoneItems]) => {
-      if (!zoneItems || zoneItems.length === 0) return null
+    // 3. Merge: stored wins over canonical
+    const resolvedZoneBounds = { ...canonicalZoneBounds, ...storedZoneBounds }
 
-      // Priority: stored widgetConfig.zoneBounds → layout.zone_bounds → canonical
-      const firstItem = zoneItems[0]
-      const wConfig = firstItem?.widget_config || {}
+    // 4. Build zoneObjectArrayList — only zones that have items
+    const zoneObjectArrayList = Object.entries(zonesMap)
+      .filter(([, zoneItems]) => zoneItems && zoneItems.length > 0)
+      .map(([zoneId, zoneItems]) => {
 
-      const zoneBounds =
-        wConfig.zoneBounds ||
-        layoutZoneBounds[zoneId] ||
-        canonicalBoundsMap[zoneId] ||
-        { x: 0, y: 0, w: 100, h: 100 }
+        // Zone bounds: stored in widgetConfig.zoneBounds OR layout-level OR canonical
+        const firstItemConfig = zoneItems[0]?.widget_config || {}
+        const zoneBounds =
+          (firstItemConfig.zoneBounds &&
+            typeof firstItemConfig.zoneBounds === 'object' &&
+            firstItemConfig.zoneBounds.w
+              ? firstItemConfig.zoneBounds
+              : null)
+          || resolvedZoneBounds[zoneId]
+          || { x: 0, y: 0, w: 100, h: 100 }
 
-      const mediaItems = zoneItems.map((item, idx) => ({
-        mediaId:         String(item.id),
-        mediaName:       item.media_name || item.widget_type || `item-${idx}`,
-        mediaType:       resolveMediaType(item),
-        mediaRemotePath: item.secure_url || item.widget_config?.url || null,
-        mediaDuration:   (item.duration || 10) * 1000,
-        mediaLocalPath:  null,
-      }))
+        const mediaItems = zoneItems.map((item, idx) => ({
+          mediaId:         String(item.id),
+          mediaName:       item.media_name || item.widget_type || `item-${idx}`,
+          mediaType:       resolveMediaType(item),
+          mediaRemotePath: item.secure_url || item.widget_config?.secureUrl || null,
+          mediaDuration:   (item.duration || 10) * 1000,
+          mediaLocalPath:  null,
+        }))
 
-      return {
-        zoneId:          String(zoneId),
-        zoneName:        resolveZoneName(zoneId),
-        zoneContentType: resolveZoneContentType(zoneItems),
-        zoneConfig: {
-          zoneWidth:     pctToFloat(zoneBounds.w),
-          zoneHeight:    pctToFloat(zoneBounds.h),
-          zonePositionX: pctToFloat(zoneBounds.x),
-          zonePositionY: pctToFloat(zoneBounds.y),
-          zonePositionZ: 0.0,
-        },
-        sequenceObject: {
-          sequenceId:   `seq-${layout.id}-${zoneId}`,
-          sequenceName: `Sequence ${resolveZoneName(zoneId)}`,
-          mediaItems,
-        },
-        sequenceScheduleDataObjectArrayList: null,
-        sequenceTriggerDataObjectArrayList:  null,
-      }
-    }).filter(Boolean) // remove null (empty zones)
+        return {
+          zoneId:          String(zoneId),
+          zoneName:        resolveZoneName(zoneId),
+          zoneContentType: resolveZoneContentType(zoneItems),
+          zoneConfig: {
+            zoneWidth:     pctToFloat(zoneBounds.w),
+            zoneHeight:    pctToFloat(zoneBounds.h),
+            zonePositionX: pctToFloat(zoneBounds.x),
+            zonePositionY: pctToFloat(zoneBounds.y),
+            zonePositionZ: 0.0,
+          },
+          sequenceObject: {
+            sequenceId:   `seq-${layout.id}-${zoneId}`,
+            sequenceName: `Sequence ${resolveZoneName(zoneId)}`,
+            mediaItems,
+          },
+          sequenceScheduleDataObjectArrayList: null,
+          sequenceTriggerDataObjectArrayList:  null,
+        }
+      })
 
     return {
       layoutId:       String(layout.id),
@@ -918,13 +947,14 @@ function pctToFloat(value) {
 /** Readable zone name from its id string */
 function resolveZoneName(zoneId) {
   const map = {
-    'zone-main':         'Main Zone',
-    'zone-left':         'Left Zone',
-    'zone-right':        'Right Zone',
-    'zone-top':          'Top Zone',
-    'zone-bottom':       'Bottom Zone',
-    'zone-bottom-left':  'Bottom Left Zone',
-    'zone-bottom-right': 'Bottom Right Zone',
+    'zone-main':          'Main Zone',
+    'zone-left':          'Left Zone',
+    'zone-right':         'Right Zone',
+    'zone-top':           'Top Zone',
+    'zone-bottom':        'Bottom Zone',
+    'zone-bottom-left':   'Bottom Left Zone',
+    'zone-bottom-right':  'Bottom Right Zone',
+    'zone-pip':           'PIP Zone',
   }
   return map[zoneId] || String(zoneId)
 }

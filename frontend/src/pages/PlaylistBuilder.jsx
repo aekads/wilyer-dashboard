@@ -32,26 +32,45 @@ function uid() {
   return 'item-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9)
 }
 
+
+const ZONE_PRESETS = {
+  'vertical':   [{ id: 'zone-main',        name: 'Main Zone',         bounds: { x: 0,  y: 0,  w: 100, h: 100 } }],
+  'horizontal': [
+    { id: 'zone-left',        name: 'Left Zone',          bounds: { x: 0,  y: 0,  w: 50,  h: 100 } },
+    { id: 'zone-right',       name: 'Right Zone',         bounds: { x: 50, y: 0,  w: 50,  h: 100 } },
+  ],
+  'top-bottom': [
+    { id: 'zone-top',         name: 'Top Zone',           bounds: { x: 0,  y: 0,  w: 100, h: 50  } },
+    { id: 'zone-bottom',      name: 'Bottom Zone',        bounds: { x: 0,  y: 50, w: 100, h: 50  } },
+  ],
+  'custom': [
+    { id: 'zone-top',         name: 'Top Zone',           bounds: { x: 0,  y: 0,  w: 100, h: 50  } },
+    { id: 'zone-bottom-left', name: 'Bottom Left Zone',   bounds: { x: 0,  y: 50, w: 50,  h: 50  } },
+    { id: 'zone-bottom-right',name: 'Bottom Right Zone',  bounds: { x: 50, y: 50, w: 50,  h: 50  } },
+  ],
+  'pip': [
+    { id: 'zone-main',        name: 'Main Zone',          bounds: { x: 0,  y: 0,  w: 100, h: 100 } },
+    { id: 'zone-pip',         name: 'PIP Zone',           bounds: { x: 65, y: 60, w: 30,  h: 35  } },
+  ],
+}
+
+function getZonesForLayout(layoutOrientation) {
+  return ZONE_PRESETS[layoutOrientation || 'vertical'] || ZONE_PRESETS['vertical']
+}
+
+
 function getZonesForOrientation(ori) {
-  if (ori === 'horizontal') return [
-    { id: 'zone-left',  name: 'Left Zone',  bounds: { x: 0,   y: 0, w: 50,  h: 100 } },
-    { id: 'zone-right', name: 'Right Zone', bounds: { x: 50,  y: 0, w: 50,  h: 100 } },
-  ]
-  if (ori === 'custom') return [
-    { id: 'zone-top',          name: 'Top Zone',          bounds: { x: 0,  y: 0,  w: 100, h: 50  } },
-    { id: 'zone-bottom-left',  name: 'Bottom Left Zone',  bounds: { x: 0,  y: 50, w: 50,  h: 50  } },
-    { id: 'zone-bottom-right', name: 'Bottom Right Zone', bounds: { x: 50, y: 50, w: 50,  h: 50  } },
-  ]
-  // vertical (default) — single full-screen zone
-  return [
-    { id: 'zone-main', name: 'Main Zone', bounds: { x: 0, y: 0, w: 100, h: 100 } },
-  ]
+  return getZonesForLayout(ori)
 }
 
 function makeEmptyLayout(ori) {
-  const zones = getZonesForOrientation(ori)
+  const zones = getZonesForLayout(ori)
   const items = {}
-  zones.forEach(z => { items[z.id] = [] })
+  const zoneBounds = {}
+  zones.forEach(z => {
+    items[z.id] = []
+    zoneBounds[z.id] = z.bounds
+  })
   return {
     id:          uid(),
     name:        'New Layout',
@@ -59,11 +78,10 @@ function makeEmptyLayout(ori) {
     width:       1920,
     height:      1080,
     position:    0,
-    zoneBounds:  Object.fromEntries(zones.map(z => [z.id, z.bounds])), // ← ADD THIS
+    zoneBounds,
     items,
   }
 }
-
 // ─── ResizableCanvasItem ──────────────────────────────────────────────────────
 
 function ResizableCanvasItem({ item, zoneId, layoutId, isSelected, onSelect, onRemove, onUpdateBounds, containerW, containerH }) {
@@ -516,6 +534,8 @@ function PreviewModal({ isOpen, onClose, layouts, zones, orientation }) {
   if (!isOpen) return null
 
   const selectedLayout = layouts.find(l => l.id === selectedLayoutId) || layouts[0]
+const selectedLayoutZones = getZonesForLayout(selectedLayout?.orientation || orientation)
+const selectedOri = selectedLayout?.orientation || orientation
 
   const renderItemContent = (item) => {
     if (item.widget_type) {
@@ -688,32 +708,39 @@ const fetchPlaylist = async () => {
     setName(d.name || 'Untitled Playlist')
     const ori = d.layout_type || 'vertical'
     setOrientation(ori)
-    const zones = getZonesForOrientation(ori)
 
     if (d.layouts && d.layouts.length > 0) {
       const itemsByLayout = d.items_by_layout || {}
 
       const loadedLayouts = d.layouts.map((layout, index) => {
+        const layoutOri = layout.orientation || ori
+        const layoutZones = getZonesForLayout(layoutOri)
+
+        // Restore zone bounds: stored > canonical
+        const canonicalZoneBounds = Object.fromEntries(layoutZones.map(z => [z.id, z.bounds]))
+        const storedZoneBounds = layout.zone_bounds
+          ? (typeof layout.zone_bounds === 'string'
+              ? JSON.parse(layout.zone_bounds)
+              : layout.zone_bounds)
+          : {}
+        const zoneBounds = { ...canonicalZoneBounds, ...storedZoneBounds }
+
         const layoutItems = itemsByLayout[layout.id] || {}
-        const layoutZones = getZonesForOrientation(layout.orientation || ori)
 
-        // Build zoneBounds: prefer stored zone_bounds, fallback to canonical
-        const zoneBounds = layout.zone_bounds
-          || Object.fromEntries(layoutZones.map(z => [z.id, z.bounds]))
-
+        // Build items for each zone defined by THIS layout's orientation
         const normalizedItems = {}
         layoutZones.forEach(z => {
           normalizedItems[z.id] = (layoutItems[z.id] || []).map(item => ({
             id:            item.id || uid(),
-            media_id:      item.media_id     || null,
-            widget_id:     item.widget_id    || null,
-            widget_type:   item.widget_type  || null,
+            media_id:      item.media_id      || null,
+            widget_id:     item.widget_id     || null,
+            widget_type:   item.widget_type   || null,
             widget_config: item.widget_config || {},
-            item_type:     item.item_type    || (item.widget_type ? 'widget' : 'media'),
-            duration:      item.duration     || 10,
-            bounds:        item.bounds       || { x: 0, y: 0, w: 100, h: 100 },
-            media_name:    item.media_name   || null,
-            secure_url:    item.secure_url   || null,
+            item_type:     item.item_type     || (item.widget_type ? 'widget' : 'media'),
+            duration:      item.duration      || 10,
+            bounds:        item.bounds        || { x: 0, y: 0, w: 100, h: 100 },
+            media_name:    item.media_name    || null,
+            secure_url:    item.secure_url    || null,
             thumbnail_url: item.thumbnail_url || null,
             resource_type: item.resource_type || null,
           }))
@@ -721,23 +748,25 @@ const fetchPlaylist = async () => {
 
         return {
           id:          layout.id,
-          name:        layout.name        || `Layout ${index + 1}`,
-          orientation: layout.orientation || ori,
-          width:       layout.width       || 1920,
-          height:      layout.height      || 1080,
+          name:        layout.name || `Layout ${index + 1}`,
+          orientation: layoutOri,
+          width:       layout.width  || 1920,
+          height:      layout.height || 1080,
           position:    index,
-          zoneBounds,          // ← restored
+          zoneBounds,
           items:       normalizedItems,
         }
       })
 
       setLayouts(loadedLayouts)
       setSelectedLayoutId(loadedLayouts[0]?.id)
-      setActiveZone(zones[0]?.id || 'zone-main')
+      const firstLayoutZones = getZonesForLayout(loadedLayouts[0]?.orientation || ori)
+      setActiveZone(firstLayoutZones[0]?.id || 'zone-main')
     } else {
       const defaultLayout = makeEmptyLayout(ori)
       setLayouts([defaultLayout])
       setSelectedLayoutId(defaultLayout.id)
+      const zones = getZonesForLayout(ori)
       setActiveZone(zones[0]?.id || 'zone-main')
     }
 
@@ -749,6 +778,7 @@ const fetchPlaylist = async () => {
     setLoading(false)
   }
 }
+
 
   const fetchMedia = async () => {
     setLoadingMedia(true)
@@ -781,13 +811,33 @@ const fetchPlaylist = async () => {
     }
   }
 
-  const addNewLayout = () => {
-    const l = makeEmptyLayout(orientation)
-    setLayouts(prev => [...prev, l])
-    setSelectedLayoutId(l.id)
-    setActiveZone(currentZones[0].id)
-    toast.success('Layout added')
-  }
+ const addNewLayout = (layoutOrientation = 'vertical') => {
+  const l = makeEmptyLayout(layoutOrientation)
+  setLayouts(prev => [...prev, l])
+  setSelectedLayoutId(l.id)
+  const zones = getZonesForLayout(layoutOrientation)
+  setActiveZone(zones[0].id)
+  toast.success(`Layout added (${layoutOrientation})`)
+}
+
+const changeLayoutOrientation = (newOri) => {
+  if (!selectedLayoutId) return
+  const newZones = getZonesForLayout(newOri)
+  const newZoneBounds = Object.fromEntries(newZones.map(z => [z.id, z.bounds]))
+  const newItems = Object.fromEntries(newZones.map(z => [z.id, []]))
+
+  setLayouts(prev => prev.map(l => {
+    if (l.id !== selectedLayoutId) return l
+    return {
+      ...l,
+      orientation: newOri,
+      zoneBounds:  newZoneBounds,
+      items:       newItems,   // reset items when zone layout changes
+    }
+  }))
+  setActiveZone(newZones[0].id)
+  toast('Zone layout changed — items reset for this layout')
+}
 
   const deleteLayout = (layoutId) => {
     if (layouts.length === 1) { toast.error('At least one layout required'); return }
@@ -902,14 +952,16 @@ const doSave = async () => {
     const allItems = []
 
     layouts.forEach((layout, layoutIdx) => {
-      const zones = getZonesForOrientation(layout.orientation || orientation)
+      // Each layout has its OWN zones based on its own orientation
+      const layoutZones = getZonesForLayout(layout.orientation || 'vertical')
+      
+      // Build zoneBounds: prefer stored, fallback to canonical
+      const storedZoneBounds = layout.zoneBounds || {}
+      const canonicalZoneBounds = Object.fromEntries(layoutZones.map(z => [z.id, z.bounds]))
+      const resolvedZoneBounds = { ...canonicalZoneBounds, ...storedZoneBounds }
 
       Object.entries(layout.items || {}).forEach(([zoneId, zoneItems]) => {
-        // Get the canonical zone bounds (not item bounds)
-        const canonicalZone = zones.find(z => z.id === zoneId)
-        const zoneBounds = layout.zoneBounds?.[zoneId]
-          || canonicalZone?.bounds
-          || { x: 0, y: 0, w: 100, h: 100 }
+        const zoneBounds = resolvedZoneBounds[zoneId] || { x: 0, y: 0, w: 100, h: 100 }
 
         zoneItems.forEach((item, itemIdx) => {
           const position = (layoutIdx * 1000) + (itemIdx * 10)
@@ -918,10 +970,8 @@ const doSave = async () => {
             ...(item.widget_config || {}),
             zoneId,
             layoutId:    layout.id,
-            // Zone-level bounds (where zone sits on screen) — 0-100 scale
-            zoneBounds,
-            // Item-level bounds (where item sits inside zone) — 0-100 scale
-            bounds:      item.bounds || { x: 0, y: 0, w: 100, h: 100 },
+            zoneBounds,                              // zone position on screen (0-100)
+            bounds:      item.bounds || { x: 0, y: 0, w: 100, h: 100 }, // item inside zone
             mediaName:    item.media_name    || null,
             thumbnailUrl: item.thumbnail_url || null,
             secureUrl:    item.secure_url    || null,
@@ -934,7 +984,7 @@ const doSave = async () => {
             widgetType: item.widget_type || null,
             widgetConfig,
             position,
-            duration:   item.duration    || 10,
+            duration: item.duration || 10,
           })
         })
       })
@@ -943,20 +993,19 @@ const doSave = async () => {
     const payload = {
       name:        name.trim(),
       layout_type: orientation,
-      layouts: layouts.map((l, i) => ({
-        id:          l.id,
-        name:        l.name        || `Layout ${i + 1}`,
-        orientation: l.orientation || orientation,
-        width:       l.width       || 1920,
-        height:      l.height      || 1080,
-        position:    i,
-        // Save zone bounds at layout level too
-        zone_bounds: l.zoneBounds
-          || Object.fromEntries(
-               getZonesForOrientation(l.orientation || orientation)
-                 .map(z => [z.id, z.bounds])
-             ),
-      })),
+      layouts: layouts.map((l, i) => {
+        const layoutZones = getZonesForLayout(l.orientation || 'vertical')
+        const canonicalZoneBounds = Object.fromEntries(layoutZones.map(z => [z.id, z.bounds]))
+        return {
+          id:          l.id,
+          name:        l.name || `Layout ${i + 1}`,
+          orientation: l.orientation || orientation,
+          width:       l.width  || 1920,
+          height:      l.height || 1080,
+          position:    i,
+          zone_bounds: { ...canonicalZoneBounds, ...(l.zoneBounds || {}) },
+        }
+      }),
     }
 
     let finalId = id
@@ -969,7 +1018,6 @@ const doSave = async () => {
     }
 
     await playlistsAPI.updateItems(finalId, { items: allItems })
-
     toast.success(id ? 'Playlist updated!' : 'Playlist created!')
     return finalId
   } catch (err) {
@@ -992,12 +1040,20 @@ const doSave = async () => {
   const CANVAS_H = isPortrait ? 427 : 236
 
   const canvasGridStyle = {
-    display: 'grid',
-    gap: '2px',
-    background: '#d1d5db',
-    gridTemplateColumns: orientation === 'vertical' ? '1fr' : '1fr 1fr',
-    gridTemplateRows:    orientation === 'custom' ? '1fr 1fr' : '1fr',
-  }
+  display:              'grid',
+  gap:                  '2px',
+  background:           '#d1d5db',
+  gridTemplateColumns:  selectedOri === 'vertical' ? '1fr'
+                        : selectedOri === 'horizontal' ? '1fr 1fr'
+                        : selectedOri === 'top-bottom' ? '1fr'
+                        : selectedOri === 'pip' ? '1fr'
+                        : '1fr 1fr',  // custom
+  gridTemplateRows:     selectedOri === 'horizontal' ? '1fr'
+                        : selectedOri === 'top-bottom' ? '1fr 1fr'
+                        : selectedOri === 'custom' ? '1fr 1fr'
+                        : selectedOri === 'pip' ? '1fr'
+                        : '1fr',
+}
 
   if (loading) {
     return (
@@ -1048,30 +1104,35 @@ const doSave = async () => {
           </div>
 
           {/* Center: orientation + new layout + auto align */}
-          <div className="flex items-center gap-2">
-            {['vertical', 'horizontal', 'custom'].map(ori => (
-              <button
-                key={ori}
-                onClick={() => changeOrientation(ori)}
-                className={`px-4 py-1.5 text-xs font-bold rounded-full transition-all ${
-                  orientation === ori
-                    ? 'bg-yellow-400 text-gray-900 shadow'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                {ori.charAt(0).toUpperCase() + ori.slice(1)}
-              </button>
-            ))}
-            <button
-              onClick={addNewLayout}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-gray-700 text-gray-200 text-xs font-bold rounded-full hover:bg-gray-600 transition-colors"
-            >
-              <Plus size={12} />New Layout
-            </button>
-            <button className="flex items-center gap-1.5 px-4 py-1.5 bg-gray-700 text-gray-200 text-xs font-bold rounded-full hover:bg-gray-600 transition-colors">
-              <Wand2 size={12} />Auto Align
-            </button>
-          </div>
+         <div className="flex items-center gap-2">
+  <span className="text-xs text-gray-400 font-medium">Layout zones:</span>
+  {[
+    { k: 'vertical',   l: 'Full' },
+    { k: 'horizontal', l: 'Left/Right' },
+    { k: 'top-bottom', l: 'Top/Bottom' },
+    { k: 'custom',     l: '3-Zone' },
+    { k: 'pip',        l: 'PIP' },
+  ].map(ori => (
+    <button
+      key={ori.k}
+      onClick={() => changeLayoutOrientation(ori.k)}
+      className={`px-3 py-1.5 text-xs font-bold rounded-full transition-all ${
+        selectedLayout?.orientation === ori.k
+          ? 'bg-yellow-400 text-gray-900 shadow'
+          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+      }`}
+    >
+      {ori.l}
+    </button>
+  ))}
+  <button
+    onClick={() => addNewLayout('vertical')}
+    className="flex items-center gap-1.5 px-4 py-1.5 bg-gray-700 text-gray-200 text-xs font-bold rounded-full hover:bg-gray-600 transition-colors"
+  >
+    <Plus size={12} />New Layout
+  </button>
+</div>
+
 
           {/* Right: Read Docs + Preview + Save (with dropdown) + Next */}
           <div className="flex items-center gap-2">
@@ -1254,36 +1315,41 @@ const doSave = async () => {
               </div>
 
               {/* Canvas */}
-              <div
-                ref={canvasRef}
-                style={{ width: CANVAS_W, height: CANVAS_H, ...canvasGridStyle }}
-                className="shadow-2xl rounded border border-gray-300 overflow-hidden"
-              >
-                {currentZones.map((zone, idx) => {
-                  const isTopSpan = orientation === 'custom' && idx === 0
-                  const lItem = layouts.find(l => l.id === selectedLayoutId) || layouts[0]
-                  return (
-                    <div
-                      key={zone.id}
-                      style={{ ...(isTopSpan ? { gridColumn: '1 / -1' } : {}), position: 'relative', overflow: 'hidden' }}
-                      onClick={e => { e.stopPropagation(); setActiveZone(zone.id) }}
-                    >
-                      <CanvasZoneDropArea
-                        zone={zone}
-                        layoutItem={lItem}
-                        isActive={!!selectedLayoutId && activeZone === zone.id}
-                        onSelect={setSelectedItemId}
-                        selectedItemId={selectedItemId}
-                        onRemove={removeItem}
-                        onUpdateBounds={updateItemBounds}
-                        containerW={CANVAS_W / (orientation === 'horizontal' ? 2 : 1)}
-                        containerH={CANVAS_H / (orientation === 'custom' ? 2 : 1)}
-                      />
-                    </div>
-                  )
-                })}
-              </div>
-
+             <div
+  ref={canvasRef}
+  style={{ width: CANVAS_W, height: CANVAS_H, ...canvasGridStyle }}
+  className="shadow-2xl rounded border border-gray-300 overflow-hidden"
+>
+  {selectedLayoutZones.map((zone, idx) => {
+    const selectedOri = selectedLayout?.orientation || orientation
+    const isTopSpan = (selectedOri === 'custom' && idx === 0)
+    return (
+      <div
+        key={zone.id}
+        style={{
+          ...(isTopSpan ? { gridColumn: '1 / -1' } : {}),
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+        onClick={e => { e.stopPropagation(); setActiveZone(zone.id) }}
+      >
+        <CanvasZoneDropArea
+          zone={zone}
+          layoutItem={selectedLayout}
+          isActive={activeZone === zone.id}
+          onSelect={setSelectedItemId}
+          selectedItemId={selectedItemId}
+          onRemove={removeItem}
+          onUpdateBounds={updateItemBounds}
+          containerW={CANVAS_W / (selectedOri === 'horizontal' ? 2 : 1)}
+          containerH={CANVAS_H / (
+            selectedOri === 'top-bottom' || selectedOri === 'custom' ? 2 : 1
+          )}
+        />
+      </div>
+    )
+  })}
+</div>
               {/* Layout cards row */}
               <div className="flex items-start gap-3 mt-6 px-4 flex-wrap justify-center">
                 {layouts.map(layoutItem => (
@@ -1318,13 +1384,13 @@ const doSave = async () => {
               <h3 className="text-sm font-bold text-gray-800">ZoneSettings</h3>
             </div>
             <ZoneSettings
-              layout={layouts.find(l => l.id === selectedLayoutId)}
-              zones={currentZones}
-              selectedItemId={selectedItemId}
-              onRemoveItem={removeItem}
-              onDurationChange={changeDuration}
-              activeZone={activeZone}
-            />
+  layout={selectedLayout}
+  zones={selectedLayoutZones}       
+  selectedItemId={selectedItemId}
+  onRemoveItem={removeItem}
+  onDurationChange={changeDuration}
+  activeZone={activeZone}
+/>
           </aside>
         </div>
       </div>
