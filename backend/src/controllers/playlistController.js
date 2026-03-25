@@ -808,7 +808,7 @@ function buildPlayablePayload(playlistData, version) {
         const firstItemZoneBounds = zoneItems[0]?.zone_bounds || zoneItems[0]?.widget_config?.zoneBounds || null
 
         // Resolve final zone bounds: level 1 → level 2 → level 3
-        const zoneBounds =
+        let zoneBounds =
           (firstItemZoneBounds &&
             typeof firstItemZoneBounds === 'object' &&
             firstItemZoneBounds.w != null
@@ -817,10 +817,19 @@ function buildPlayablePayload(playlistData, version) {
           || resolvedLayoutBounds[zoneId]
           || { x: 0, y: 0, w: 100, h: 100 }
 
+        // Ensure zoneBounds has all required properties
+        zoneBounds = {
+          x: zoneBounds.x ?? 0,
+          y: zoneBounds.y ?? 0,
+          w: zoneBounds.w ?? 100,
+          h: zoneBounds.h ?? 100
+        }
+
         console.log(`[PAYLOAD]   Zone "${zoneId}": bounds=`, zoneBounds, `items=${zoneItems.length}`)
 
+        // Build mediaItems array with proper duration calculation
         const mediaItems = zoneItems.map((item, idx) => ({
-          mediaId:         String(item.id),
+          mediaId:         String(item.id || item.media_id || `item-${idx}`),
           mediaName:       item.media_name || item.widget_type || `item-${idx}`,
           mediaType:       resolveMediaType(item),
           mediaRemotePath: item.secure_url || item.widget_config?.secureUrl || null,
