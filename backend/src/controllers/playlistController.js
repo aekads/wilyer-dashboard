@@ -25,7 +25,7 @@ const createPlaylist = async (req, res, next) => {
       width:       l.width  || 1920,
       height:      l.height || 1080,
       position:    index,
-      zone_bounds: l.zone_bounds || null,   // ← SAVE zone_bounds
+      zone_bounds: l.zone_bounds || null,
     }))) : '[]'
 
     const result = await query(`
@@ -45,13 +45,18 @@ const createPlaylist = async (req, res, next) => {
     ])
 
     const playlist = result.rows[0]
-    await createAuditLog({ orgId, userId, action: 'playlist.create', entityType: 'playlist', entityId: playlist.id, newValues: { name } })
+    await createAuditLog({
+      orgId, userId, action: 'playlist.create',
+      entityType: 'playlist', entityId: playlist.id,
+      newValues: { name }
+    })
     res.status(201).json({ success: true, data: playlist })
   } catch (err) {
     console.error('Create playlist error:', err)
     next(err)
   }
 }
+
 // ─── PATCH /api/playlists/:id ─────────────────────────────────────────────────
 const updatePlaylist = async (req, res, next) => {
   try {
@@ -68,7 +73,7 @@ const updatePlaylist = async (req, res, next) => {
         width:       l.width  || 1920,
         height:      l.height || 1080,
         position:    index,
-        zone_bounds: l.zone_bounds || null,   // ← SAVE zone_bounds
+        zone_bounds: l.zone_bounds || null,
       })))
     }
 
@@ -97,7 +102,11 @@ const updatePlaylist = async (req, res, next) => {
     ])
 
     if (!result.rows[0]) throw new AppError('Playlist not found', 404)
-    await createAuditLog({ orgId, userId, action: 'playlist.update', entityType: 'playlist', entityId: id, newValues: { name, layout_type } })
+    await createAuditLog({
+      orgId, userId, action: 'playlist.update',
+      entityType: 'playlist', entityId: id,
+      newValues: { name, layout_type }
+    })
     res.json({ success: true, data: result.rows[0] })
   } catch (err) {
     console.error('Update playlist error:', err)
@@ -105,7 +114,6 @@ const updatePlaylist = async (req, res, next) => {
   }
 }
 
-// ─── GET /api/playlists ───────────────────────────────────────────────────────
 // ─── GET /api/playlists ───────────────────────────────────────────────────────
 const getPlaylists = async (req, res, next) => {
   try {
@@ -146,33 +154,17 @@ const getPlaylists = async (req, res, next) => {
           p.deleted_at,
           u.first_name || ' ' || u.last_name AS creator_name,
           COUNT(DISTINCT pi.id)::int AS item_count,
-          COUNT(DISTINCT s.id)::int AS screen_count
+          COUNT(DISTINCT s.id)::int  AS screen_count
         FROM wilyer_playlists p
-        LEFT JOIN wilyer_users u ON u.id = p.created_by
+        LEFT JOIN wilyer_users u         ON u.id  = p.created_by
         LEFT JOIN wilyer_playlist_items pi ON pi.playlist_id = p.id AND pi.is_active = TRUE
-        LEFT JOIN wilyer_screens s ON s.assigned_playlist_id = p.id AND s.deleted_at IS NULL
+        LEFT JOIN wilyer_screens s         ON s.assigned_playlist_id = p.id AND s.deleted_at IS NULL
         WHERE ${where}
-        GROUP BY 
-          p.id, 
-          p.org_id,
-          p.created_by,
-          p.name,
-          p.description,
-          p.status,
-          p.layout_type,
-          p.layouts,
-          p.is_loop,
-          p.transition_type,
-          p.tags,
-          p.version,
-          p.published_at,
-          p.published_by,
-          p.total_duration,
-          p.created_at,
-          p.updated_at,
-          p.deleted_at,
-          u.first_name,
-          u.last_name
+        GROUP BY
+          p.id, p.org_id, p.created_by, p.name, p.description, p.status,
+          p.layout_type, p.layouts, p.is_loop, p.transition_type, p.tags,
+          p.version, p.published_at, p.published_by, p.total_duration,
+          p.created_at, p.updated_at, p.deleted_at, u.first_name, u.last_name
         ORDER BY p.created_at DESC
         LIMIT $${idx} OFFSET $${idx + 1}
       `, [...params, limit, offset]),
@@ -189,11 +181,11 @@ const getPlaylists = async (req, res, next) => {
         pages: Math.ceil(parseInt(total.rows[0].count) / limit),
       },
     })
-  } catch (err) { 
-    console.error('Error in getPlaylists:', err);
-    next(err); 
+  } catch (err) {
+    console.error('Error in getPlaylists:', err)
+    next(err)
   }
-};
+}
 
 // ─── GET /api/playlists/:id ───────────────────────────────────────────────────
 const getPlaylist = async (req, res, next) => {
@@ -203,10 +195,10 @@ const getPlaylist = async (req, res, next) => {
 
     const playlistResult = await query(`
       SELECT p.*,
-        u.first_name || ' ' || u.last_name AS creator_name,
+        u.first_name   || ' ' || u.last_name   AS creator_name,
         pub.first_name || ' ' || pub.last_name AS publisher_name
       FROM wilyer_playlists p
-      LEFT JOIN wilyer_users u ON u.id = p.created_by
+      LEFT JOIN wilyer_users u   ON u.id   = p.created_by
       LEFT JOIN wilyer_users pub ON pub.id = p.published_by
       WHERE p.id = $1 AND p.org_id = $2 AND p.deleted_at IS NULL
     `, [id, orgId])
@@ -215,9 +207,8 @@ const getPlaylist = async (req, res, next) => {
 
     const playlist = playlistResult.rows[0]
 
+    // Parse layouts and ensure zone_bounds is parsed from JSON if stored as string
     let layouts = parseJsonField(playlist.layouts, [])
-
-    // Parse zone_bounds in each layout
     layouts = layouts.map(l => ({
       ...l,
       zone_bounds: parseJsonField(l.zone_bounds, null),
@@ -238,41 +229,37 @@ const getPlaylist = async (req, res, next) => {
     const itemsResult = await query(`
       SELECT
         pi.*,
-        mf.name         AS media_name,
+        mf.name          AS media_name,
         mf.secure_url,
         mf.thumbnail_url,
         mf.resource_type,
         mf.format,
-        mf.duration     AS media_duration,
-        mf.width        AS media_width,
-        mf.height       AS media_height,
-        w.name          AS widget_name,
-        w.type          AS widget_type_from_table,
-        w.config        AS widget_config_from_table
+        mf.duration      AS media_duration,
+        mf.width         AS media_width,
+        mf.height        AS media_height,
+        w.name           AS widget_name,
+        w.type           AS widget_type_from_table,
+        w.config         AS widget_config_from_table
       FROM wilyer_playlist_items pi
       LEFT JOIN wilyer_media_files mf ON mf.id = pi.media_id
-      LEFT JOIN wilyer_widgets w ON w.id = pi.widget_id
+      LEFT JOIN wilyer_widgets w      ON w.id  = pi.widget_id
       WHERE pi.playlist_id = $1
       ORDER BY pi.position ASC
     `, [id])
 
     const itemsByLayout = buildItemsByLayout(itemsResult.rows, layouts)
-    const items = itemsResult.rows.map(row => normalizeItemRow(row))
+    const items         = itemsResult.rows.map(row => normalizeItemRow(row))
 
     res.json({
       success: true,
-      data: {
-        ...playlist,
-        layouts,
-        items,
-        items_by_layout: itemsByLayout
-      }
+      data: { ...playlist, layouts, items, items_by_layout: itemsByLayout }
     })
   } catch (err) {
     console.error('Get playlist error:', err)
     next(err)
   }
 }
+
 // ─── PUT /api/playlists/:id/items ─────────────────────────────────────────────
 const updatePlaylistItems = async (req, res, next) => {
   try {
@@ -295,21 +282,24 @@ const updatePlaylistItems = async (req, res, next) => {
       if (items.length > 0) {
         const rows = items.map((item, index) => {
           const pos = item.position !== undefined ? item.position : index * 10
-         const wConfig = {
-  ...(item.widgetConfig || {}),
-  zoneId:      item.widgetConfig?.zoneId   || item.zoneId   || 'zone-main',
-  layoutId:    item.widgetConfig?.layoutId || item.layoutId || null,
-  bounds:      item.widgetConfig?.bounds   || { x: 0, y: 0, w: 100, h: 100 },
-  mediaName:    item.widgetConfig?.mediaName    || null,
-  thumbnailUrl: item.widgetConfig?.thumbnailUrl || null,
-  secureUrl:    item.widgetConfig?.secureUrl    || null,
-  resourceType: item.widgetConfig?.resourceType || null,
-}
 
-// Add this validation
-if (!item.widgetConfig?.zoneId && !item.zoneId) {
-  console.warn(`⚠️  [PLAYLIST] Item at position ${pos} has no zoneId — defaulting to zone-main`)
-}
+          // Build widgetConfig — ensure zoneId, layoutId, zoneBounds are always saved
+          const wConfig = {
+            ...(item.widgetConfig || {}),
+            zoneId:      item.widgetConfig?.zoneId      || item.zoneId      || 'zone-main',
+            layoutId:    item.widgetConfig?.layoutId    || item.layoutId    || null,
+            zoneBounds:  item.widgetConfig?.zoneBounds  || null,
+            bounds:      item.widgetConfig?.bounds      || { x: 0, y: 0, w: 100, h: 100 },
+            mediaName:    item.widgetConfig?.mediaName    || null,
+            thumbnailUrl: item.widgetConfig?.thumbnailUrl || null,
+            secureUrl:    item.widgetConfig?.secureUrl    || null,
+            resourceType: item.widgetConfig?.resourceType || null,
+          }
+
+          if (!item.widgetConfig?.zoneId && !item.zoneId) {
+            console.warn(`⚠️  [PLAYLIST] Item at position ${pos} has no zoneId — defaulting to zone-main`)
+          }
+
           return [
             id,
             item.mediaId    || null,
@@ -345,7 +335,7 @@ if (!item.widgetConfig?.zoneId && !item.zoneId) {
 
     console.log(`✅ [PLAYLIST] Items saved for playlist ${id}, new version: ${newVersion}`)
 
-    // ── Push updated playlist to all assigned screens via "message" event ────
+    // ── Push updated playlist to all assigned screens ─────────────────────
     const io = getSocketIO()
     if (io) {
       const playlistData = await getFullPlaylistData(id, orgId)
@@ -380,7 +370,6 @@ if (!item.widgetConfig?.zoneId && !item.zoneId) {
               const aesKey    = Buffer.from(aes_secret_key, 'base64')
               const payload   = buildPlayablePayload(playlistData, newVersion)
               const encrypted = encryptForDevice(payload, aesKey)
-              // "message" is the single server→device event name (per flow diagram)
               io.to(auth_key).emit('message', encrypted)
               console.log(`✅ [PLAYLIST] Pushed to screen ${screen.id} room "${auth_key}" (${roomSize} socket(s))`)
             } else {
@@ -422,7 +411,7 @@ const publishPlaylist = async (req, res, next) => {
       UPDATE wilyer_playlists SET
         status       = $1,
         published_at = ${action === 'publish' ? 'NOW()' : 'NULL'},
-        published_by = ${action === 'publish' ? `$4` : 'NULL'},
+        published_by = ${action === 'publish' ? '$4' : 'NULL'},
         updated_at   = NOW()
       WHERE id = $2 AND org_id = $3 AND deleted_at IS NULL
       RETURNING *
@@ -520,23 +509,25 @@ function normalizeItemRow(row) {
     is_active:      row.is_active,
     created_at:     row.created_at,
     updated_at:     row.updated_at,
-    layout_id:      wConfig.layoutId  || null,
-    zone_id:        wConfig.zoneId    || 'zone-main',
-    bounds:         wConfig.bounds    || { x: 0, y: 0, w: 100, h: 100 },
-    media_name:     row.media_name    || wConfig.mediaName    || null,
-    secure_url:     row.secure_url    || wConfig.secureUrl    || null,
-    thumbnail_url:  row.thumbnail_url || wConfig.thumbnailUrl || null,
-    resource_type:  row.resource_type || wConfig.resourceType || null,
-    format:         row.format        || null,
+    layout_id:      wConfig.layoutId   || null,
+    zone_id:        wConfig.zoneId     || 'zone-main',
+    // zone_bounds from widgetConfig — used by buildPlayablePayload
+    zone_bounds:    wConfig.zoneBounds || null,
+    bounds:         wConfig.bounds     || { x: 0, y: 0, w: 100, h: 100 },
+    media_name:     row.media_name     || wConfig.mediaName    || null,
+    secure_url:     row.secure_url     || wConfig.secureUrl    || null,
+    thumbnail_url:  row.thumbnail_url  || wConfig.thumbnailUrl || null,
+    resource_type:  row.resource_type  || wConfig.resourceType || null,
+    format:         row.format         || null,
     media_duration: row.media_duration || null,
-    width:          row.media_width   || null,
-    height:         row.media_height  || null,
+    width:          row.media_width    || null,
+    height:         row.media_height   || null,
   }
 }
 
 function buildItemsByLayout(rows, layouts) {
   const defaultLayoutId = layouts[0]?.id || 'default'
-  const itemsByLayout = {}
+  const itemsByLayout   = {}
   layouts.forEach(layout => { itemsByLayout[layout.id] = {} })
 
   rows.forEach(row => {
@@ -557,6 +548,7 @@ function buildItemsByLayout(rows, layouts) {
       position:       item.position,
       duration:       item.duration,
       bounds:         item.bounds,
+      zone_bounds:    item.zone_bounds,    // ← carry zone_bounds through
       media_name:     item.media_name,
       secure_url:     item.secure_url,
       thumbnail_url:  item.thumbnail_url,
@@ -587,10 +579,9 @@ function buildItemsByLayout(rows, layouts) {
   return itemsByLayout
 }
 
-/**
- * Fetch full playlist + items from DB.
- * Exported for screenController and sockets.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// getFullPlaylistData — Exported for screenController and sockets
+// ─────────────────────────────────────────────────────────────────────────────
 const getFullPlaylistData = async (playlistId, orgId) => {
   try {
     const [playlistRes, itemsRes] = await Promise.all([
@@ -601,14 +592,14 @@ const getFullPlaylistData = async (playlistId, orgId) => {
       query(`
         SELECT
           pi.*,
-          mf.name         AS media_name,
+          mf.name          AS media_name,
           mf.secure_url,
           mf.thumbnail_url,
           mf.resource_type,
           mf.format,
-          mf.duration     AS media_duration,
-          mf.width        AS media_width,
-          mf.height       AS media_height
+          mf.duration      AS media_duration,
+          mf.width         AS media_width,
+          mf.height        AS media_height
         FROM wilyer_playlist_items pi
         LEFT JOIN wilyer_media_files mf ON mf.id = pi.media_id
         WHERE pi.playlist_id = $1
@@ -620,9 +611,9 @@ const getFullPlaylistData = async (playlistId, orgId) => {
     if (!playlistRes.rows[0]) return null
 
     const pl = playlistRes.rows[0]
-    let layouts = parseJsonField(pl.layouts, [])
 
-    // Parse zone_bounds for each layout
+    // Parse layouts — ensure zone_bounds is parsed from JSON string if needed
+    let layouts = parseJsonField(pl.layouts, [])
     layouts = layouts.map(l => ({
       ...l,
       zone_bounds: parseJsonField(l.zone_bounds, null),
@@ -663,172 +654,114 @@ const getFullPlaylistData = async (playlistId, orgId) => {
     return null
   }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
-// APK PAYLOAD BUILDER
+// ZONE BOUNDS HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
-//
-// OUTPUT — what the APK receives after AES decryption of the "message" event:
-//
-// {
-//   "type": "playable_data",
-//   "data": {
-//     "playlistObjectArrayList": [
-//       {
-//         "playlistId": "uuid-here",
-//         "playlistName": "My Playlist",
-//         "isLoop": true,
-//         "transitionType": "none",
-//         "totalDuration": 30000,
-//         "layoutObjectArrayList": [
-//           {
-//             "layoutId": "layout-uuid",
-//             "layoutName": "Main Layout",
-//             "layoutDuration": 30000,
-//             "uiRotation": 0,
-//             "zoneObjectArrayList": [
-//               {
-//                 "zoneId": "zone-main",
-//                 "zoneName": "Main Zone",
-//                 "zoneContentType": "image",
-//                 "zoneConfig": {
-//                   "zoneWidth": 1.0,
-//                   "zoneHeight": 1.0,
-//                   "zonePositionX": 0.0,
-//                   "zonePositionY": 0.0,
-//                   "zonePositionZ": 0.0
-//                 },
-//                 "sequenceObject": {
-//                   "sequenceId": "seq-layout-uuid-zone-main",
-//                   "sequenceName": "Sequence Main Zone",
-//                   "mediaItems": [
-//                     {
-//                       "mediaId": "item-uuid",
-//                       "mediaName": "photo.jpg",
-//                       "mediaType": "image",
-//                       "mediaRemotePath": "https://res.cloudinary.com/…/photo.jpg",
-//                       "mediaDuration": 10000,
-//                       "mediaLocalPath": null
-//                     }
-//                   ]
-//                 },
-//                 "sequenceScheduleDataObjectArrayList": null,
-//                 "sequenceTriggerDataObjectArrayList":  null
-//               }
-//             ],
-//             "layoutScheduleDataObjectArrayList": null,
-//             "layoutTriggerDataObjectArrayList":  null
-//           }
-//         ],
-//         "layoutScheduleDataObjectArrayList": null,
-//         "layoutTriggerDataObjectArrayList":  null
-//       }
-//     ],
-//     "scheduleDataObjectArrayList": null
-//   }
-// }
-//
 
-
-// function buildPlayablePayload(playlistData, version) {
-//   const layouts       = playlistData.layouts        || []
-//   const itemsByLayout = playlistData.items_by_layout || {}
-
-//   const layoutObjectArrayList = layouts.map((layout, layoutIndex) => {
-//     const zonesMap = itemsByLayout[layout.id] || {}
-
-//     const zoneObjectArrayList = Object.entries(zonesMap).map(([zoneId, zoneItems]) => {
-//       // bounds: stored as 0–100 pct in DB → convert to 0.0–1.0 for APK
-//       const bounds = zoneItems[0]?.bounds || { x: 0, y: 0, w: 100, h: 100 }
-
-//       // mediaItems — EXACTLY the 6 fields the APK contract defines
-//       const mediaItems = zoneItems.map((item, idx) => ({
-//         mediaId:         String(item.id),
-//         mediaName:       item.media_name || item.widget_type || `item-${idx}`,
-//         mediaType:       resolveMediaType(item),
-//         mediaRemotePath: item.secure_url || item.widget_config?.url || null,
-//         mediaDuration:   (item.duration || 10) * 1000,  // seconds → ms
-//         mediaLocalPath:  null,
-//       }))
-
-//       return {
-//         zoneId:          String(zoneId),
-//         zoneName:        resolveZoneName(zoneId),
-//         zoneContentType: resolveZoneContentType(zoneItems),
-//         zoneConfig: {
-//           zoneWidth:     pctToFloat(bounds.w),
-//           zoneHeight:    pctToFloat(bounds.h),
-//           zonePositionX: pctToFloat(bounds.x),
-//           zonePositionY: pctToFloat(bounds.y),
-//           zonePositionZ: 0.0,
-//         },
-//         sequenceObject: {
-//           sequenceId:   `seq-${layout.id}-${zoneId}`,
-//           sequenceName: `Sequence ${resolveZoneName(zoneId)}`,
-//           mediaItems,
-//         },
-//         sequenceScheduleDataObjectArrayList: null,
-//         sequenceTriggerDataObjectArrayList:  null,
-//       }
-//     })
-
-//     return {
-//       layoutId:       String(layout.id),
-//       layoutName:     layout.name || `Layout ${layoutIndex + 1}`,
-//       layoutDuration: calcLayoutDuration(zonesMap),
-//       uiRotation:     resolveRotation(layout),
-//       zoneObjectArrayList,
-//       layoutScheduleDataObjectArrayList: null,
-//       layoutTriggerDataObjectArrayList:  null,
-//     }
-//   })
-
-//   // ── Root envelope — exactly matches APK contract ──────────────────────────
-//   return {
-//     type: 'playable_data',
-//     data: {
-//       playlistObjectArrayList: [
-//         {
-//           playlistId:    String(playlistData.id),
-//           playlistName:  playlistData.name,
-//           isLoop:        playlistData.is_loop !== false,
-//           transitionType: playlistData.transition_type || 'none',
-//           totalDuration: (playlistData.total_duration || 0) * 1000,  // seconds → ms
-//           layoutObjectArrayList,
-//           layoutScheduleDataObjectArrayList: null,
-//           layoutTriggerDataObjectArrayList:  null,
-//         }
-//       ],
-//       scheduleDataObjectArrayList: null,
-//     },
-//   }
-//   // NOTE: `version` is intentionally excluded from the APK payload.
-//   //       It is a server-side tracking field only.
-// }
-
+/**
+ * Canonical zone bounds per orientation.
+ * Used as fallback when zone_bounds not stored on layout or widgetConfig.
+ *
+ * All values are 0–100 scale (percentage).
+ * pctToFloat() converts them to 0.0–1.0 for the APK.
+ *
+ * Target APK output example for top-bottom layout:
+ *   zone-top:    { zoneHeight: 0.5, zonePositionY: 0.0 }
+ *   zone-bottom: { zoneHeight: 0.5, zonePositionY: 0.5 }
+ */
 function getCanonicalZoneBounds(orientation) {
   const presets = {
-    'vertical':   { 'zone-main':          { x: 0,  y: 0,  w: 100, h: 100 } },
+    'vertical': {
+      'zone-main':          { x: 0,  y: 0,  w: 100, h: 100 },
+    },
     'horizontal': {
-      'zone-left':           { x: 0,  y: 0,  w: 50,  h: 100 },
-      'zone-right':          { x: 50, y: 0,  w: 50,  h: 100 },
+      'zone-left':          { x: 0,  y: 0,  w: 50,  h: 100 },
+      'zone-right':         { x: 50, y: 0,  w: 50,  h: 100 },
     },
     'top-bottom': {
-      'zone-top':            { x: 0,  y: 0,  w: 100, h: 50  },
-      'zone-bottom':         { x: 0,  y: 50, w: 100, h: 50  },
+      'zone-top':           { x: 0,  y: 0,  w: 100, h: 50  },
+      'zone-bottom':        { x: 0,  y: 50, w: 100, h: 50  },
     },
     'custom': {
-      'zone-top':            { x: 0,  y: 0,  w: 100, h: 50  },
-      'zone-bottom-left':    { x: 0,  y: 50, w: 50,  h: 50  },
-      'zone-bottom-right':   { x: 50, y: 50, w: 50,  h: 50  },
+      'zone-top':           { x: 0,  y: 0,  w: 100, h: 50  },
+      'zone-bottom-left':   { x: 0,  y: 50, w: 50,  h: 50  },
+      'zone-bottom-right':  { x: 50, y: 50, w: 50,  h: 50  },
     },
     'pip': {
-      'zone-main':           { x: 0,  y: 0,  w: 100, h: 100 },
-      'zone-pip':            { x: 65, y: 60, w: 30,  h: 35  },
+      'zone-main':          { x: 0,  y: 0,  w: 100, h: 100 },
+      'zone-pip':           { x: 65, y: 60, w: 30,  h: 35  },
     },
   }
   return presets[orientation] || presets['vertical']
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// APK PAYLOAD BUILDER
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Produces the exact structure the APK expects after AES decryption:
+//
+// {
+//   "type": "playable_data",
+//   "data": {
+//     "playlistObjectArrayList": [{
+//       "playlistId": "24",
+//       "playlistName": "...",
+//       "isLoop": true,
+//       "transitionType": "none",
+//       "totalDuration": 30000,
+//       "layoutObjectArrayList": [
+//         {
+//           "layoutId": "item-xxx-abc",
+//           "layoutName": "Split Layout",
+//           "layoutDuration": 10000,
+//           "uiRotation": 0,
+//           "zoneObjectArrayList": [
+//             {
+//               "zoneId": "zone-top",
+//               "zoneName": "Top Zone",
+//               "zoneContentType": "video",
+//               "zoneConfig": {
+//                 "zoneWidth": 1.0,
+//                 "zoneHeight": 0.5,
+//                 "zonePositionX": 0.0,
+//                 "zonePositionY": 0.0,
+//                 "zonePositionZ": 0.0
+//               },
+//               "sequenceObject": {
+//                 "sequenceId": "seq-item-xxx-abc-zone-top",
+//                 "sequenceName": "Sequence Top Zone",
+//                 "mediaItems": [{ ... }]
+//               },
+//               "sequenceScheduleDataObjectArrayList": null,
+//               "sequenceTriggerDataObjectArrayList": null
+//             },
+//             {
+//               "zoneId": "zone-bottom",
+//               "zoneConfig": { "zoneHeight": 0.5, "zonePositionY": 0.5, ... },
+//               ...
+//             }
+//           ],
+//           "layoutScheduleDataObjectArrayList": null,
+//           "layoutTriggerDataObjectArrayList": null
+//         },
+//         {
+//           "layoutId": "item-xxx-xyz",
+//           "layoutName": "Full Layout",
+//           "zoneObjectArrayList": [
+//             { "zoneId": "zone-main", "zoneConfig": { "zoneHeight": 1.0, ... }, ... }
+//           ],
+//           ...
+//         }
+//       ],
+//       "layoutScheduleDataObjectArrayList": null,
+//       "layoutTriggerDataObjectArrayList": null
+//     }],
+//     "scheduleDataObjectArrayList": null
+//   }
+// }
+//
 function buildPlayablePayload(playlistData, version) {
   const layouts       = playlistData.layouts        || []
   const itemsByLayout = playlistData.items_by_layout || {}
@@ -836,46 +769,62 @@ function buildPlayablePayload(playlistData, version) {
   const layoutObjectArrayList = layouts.map((layout, layoutIndex) => {
     const zonesMap = itemsByLayout[layout.id] || {}
 
-    // 1. zone_bounds stored on layout (now actually saved!)
-    let storedZoneBounds = {}
+    // ── Resolve zone bounds for this layout ───────────────────────────────
+    //
+    // Priority (highest to lowest):
+    //   1. widgetConfig.zoneBounds  — per-item, set by frontend doSave()
+    //   2. layout.zone_bounds       — per-layout, set by frontend doSave()
+    //   3. getCanonicalZoneBounds() — fallback based on orientation
+    //
+    // This 3-level priority ensures:
+    //   - Custom resized zones (level 1) always win
+    //   - Standard preset zones saved by frontend (level 2) win over defaults
+    //   - If nothing saved, canonical orientation defaults (level 3) kick in
+
+    // Level 2: parse layout.zone_bounds
+    let layoutZoneBounds = {}
     try {
       const zb = layout.zone_bounds
-      if (zb) storedZoneBounds = typeof zb === 'string' ? JSON.parse(zb) : zb
+      if (zb) layoutZoneBounds = typeof zb === 'string' ? JSON.parse(zb) : zb
     } catch (e) {}
 
-    // 2. Canonical fallback
+    // Level 3: canonical fallback
     const canonicalZoneBounds = getCanonicalZoneBounds(layout.orientation || 'vertical')
 
-    // 3. Merge: stored wins
-    const resolvedZoneBounds = { ...canonicalZoneBounds, ...storedZoneBounds }
+    // Merge level 3 + level 2 (level 2 wins over level 3)
+    const resolvedLayoutBounds = { ...canonicalZoneBounds, ...layoutZoneBounds }
 
-    console.log(`[PAYLOAD] Layout "${layout.name}" orientation="${layout.orientation}"`)
-    console.log(`[PAYLOAD] zones in DB:`, Object.keys(zonesMap))
-    console.log(`[PAYLOAD] resolvedZoneBounds:`, resolvedZoneBounds)
+    console.log(`[PAYLOAD] Layout "${layout.name}" ori="${layout.orientation}"`)
+    console.log(`[PAYLOAD]   zones in DB:`, Object.keys(zonesMap))
+    console.log(`[PAYLOAD]   layoutZoneBounds:`, layoutZoneBounds)
+    console.log(`[PAYLOAD]   resolvedLayoutBounds:`, resolvedLayoutBounds)
 
-    // 4. Build zones — only zones with items
+    // ── Build zoneObjectArrayList — only zones that have items ────────────
     const zoneObjectArrayList = Object.entries(zonesMap)
       .filter(([, zoneItems]) => zoneItems && zoneItems.length > 0)
       .map(([zoneId, zoneItems]) => {
 
-        // Zone bounds priority: widgetConfig.zoneBounds > layout zone_bounds > canonical
-        const firstItemConfig = zoneItems[0]?.widget_config || {}
-        const wConfigZoneBounds = firstItemConfig.zoneBounds
+        // Level 1: widgetConfig.zoneBounds from first item
+        const firstItemZoneBounds = zoneItems[0]?.zone_bounds || zoneItems[0]?.widget_config?.zoneBounds || null
+
+        // Resolve final zone bounds: level 1 → level 2 → level 3
         const zoneBounds =
-          (wConfigZoneBounds && typeof wConfigZoneBounds === 'object' && wConfigZoneBounds.w
-            ? wConfigZoneBounds
-            : null)
-          || resolvedZoneBounds[zoneId]
+          (firstItemZoneBounds &&
+            typeof firstItemZoneBounds === 'object' &&
+            firstItemZoneBounds.w != null
+              ? firstItemZoneBounds
+              : null)
+          || resolvedLayoutBounds[zoneId]
           || { x: 0, y: 0, w: 100, h: 100 }
 
-        console.log(`[PAYLOAD]   Zone "${zoneId}" bounds:`, zoneBounds, `items: ${zoneItems.length}`)
+        console.log(`[PAYLOAD]   Zone "${zoneId}": bounds=`, zoneBounds, `items=${zoneItems.length}`)
 
         const mediaItems = zoneItems.map((item, idx) => ({
           mediaId:         String(item.id),
           mediaName:       item.media_name || item.widget_type || `item-${idx}`,
           mediaType:       resolveMediaType(item),
           mediaRemotePath: item.secure_url || item.widget_config?.secureUrl || null,
-          mediaDuration:   (item.duration || 10) * 1000,
+          mediaDuration:   (item.duration || 10) * 1000,   // seconds → ms
           mediaLocalPath:  null,
         }))
 
@@ -911,6 +860,7 @@ function buildPlayablePayload(playlistData, version) {
     }
   })
 
+  // ── Root envelope ─────────────────────────────────────────────────────────
   return {
     type: 'playable_data',
     data: {
@@ -919,7 +869,7 @@ function buildPlayablePayload(playlistData, version) {
         playlistName:  playlistData.name,
         isLoop:        playlistData.is_loop !== false,
         transitionType: playlistData.transition_type || 'none',
-        totalDuration: (playlistData.total_duration || 0) * 1000,
+        totalDuration: (playlistData.total_duration || 0) * 1000,   // seconds → ms
         layoutObjectArrayList,
         layoutScheduleDataObjectArrayList: null,
         layoutTriggerDataObjectArrayList:  null,
@@ -927,21 +877,7 @@ function buildPlayablePayload(playlistData, version) {
       scheduleDataObjectArrayList: null,
     },
   }
-}
-// ADD this new helper — canonical zone bounds by orientation
-function getCanonicalZonesForOrientation(orientation) {
-  if (orientation === 'horizontal') return [
-    { id: 'zone-left',         bounds: { x: 0,  y: 0,  w: 50,  h: 100 } },
-    { id: 'zone-right',        bounds: { x: 50, y: 0,  w: 50,  h: 100 } },
-  ]
-  if (orientation === 'custom') return [
-    { id: 'zone-top',          bounds: { x: 0,  y: 0,  w: 100, h: 50  } },
-    { id: 'zone-bottom-left',  bounds: { x: 0,  y: 50, w: 50,  h: 50  } },
-    { id: 'zone-bottom-right', bounds: { x: 50, y: 50, w: 50,  h: 50  } },
-  ]
-  return [
-    { id: 'zone-main',         bounds: { x: 0,  y: 0,  w: 100, h: 100 } },
-  ]
+  // NOTE: `version` is intentionally excluded from APK payload — server-side only.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -988,7 +924,7 @@ function resolveMediaType(item) {
 function resolveZoneContentType(items) {
   if (!items?.length) return 'unknown'
   const pureMedia = ['video', 'image', 'unknown', 'document']
-  const types = items.map(resolveMediaType)
+  const types     = items.map(resolveMediaType)
   if (types.some(t => !pureMedia.includes(t))) return 'widget'
   const unique = [...new Set(types)]
   if (unique.length === 1 && unique[0] === 'video') return 'video'
@@ -996,7 +932,7 @@ function resolveZoneContentType(items) {
   return 'mixed'
 }
 
-/** Max zone duration (ms) — zones play in parallel so layout ends at the longest */
+/** Max zone duration (ms) — zones play in parallel, layout ends at the longest */
 function calcLayoutDuration(zonesMap) {
   let max = 0
   Object.values(zonesMap).forEach(items => {
@@ -1006,13 +942,13 @@ function calcLayoutDuration(zonesMap) {
   return max || 10_000
 }
 
-/** orientation → APK uiRotation integer */
+/** orientation string → APK uiRotation integer */
 function resolveRotation(layout) {
   const o = (layout.orientation || '').toLowerCase()
   if (o === 'portrait')          return 90
   if (o === 'portrait_reverse')  return 270
   if (o === 'landscape_reverse') return 180
-  return 0
+  return 0   // vertical, horizontal, top-bottom, custom, pip → 0
 }
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
