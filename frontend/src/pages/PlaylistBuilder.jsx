@@ -60,8 +60,10 @@ function getZonesForLayout(layoutOrientation) {
   return ZONE_PRESETS[layoutOrientation || 'vertical'] || ZONE_PRESETS['vertical']
 }
 
-function getZonesForOrientation(ori) {
-  return getZonesForLayout(ori)
+function getZoneBoundsForOrientation(orientation, zoneId) {
+  const zones = ZONE_PRESETS[orientation || 'vertical']
+  const zone = zones.find(z => z.id === zoneId)
+  return zone ? { ...zone.bounds } : { x: 0, y: 0, w: 100, h: 100 }
 }
 
 function makeEmptyLayout(ori) {
@@ -84,7 +86,7 @@ function makeEmptyLayout(ori) {
   }
 }
 
-// ─── Shared renderItemContent (top-level so all components can use it) ────────
+// ─── Shared renderItemContent ────────────────────────────────────────────────
 
 function renderItemContent(item) {
   if (!item) return null
@@ -466,6 +468,50 @@ function ZoneSettings({ layout, zones, selectedItemId, onRemoveItem, onDurationC
               className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-blue-400"
             />
           </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Zone Bounds</label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[9px] text-gray-400">X (%)</label>
+                <input
+                  type="number"
+                  value={layout.zoneBounds?.[activeZone]?.x || 0}
+                  onChange={(e) => {
+                    const newVal = Math.max(0, Math.min(100 - (layout.zoneBounds?.[activeZone]?.w || 100), parseInt(e.target.value) || 0))
+                    // Update zone bounds logic would go here
+                  }}
+                  className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] text-gray-400">Y (%)</label>
+                <input
+                  type="number"
+                  value={layout.zoneBounds?.[activeZone]?.y || 0}
+                  className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs"
+                  disabled
+                />
+              </div>
+              <div>
+                <label className="text-[9px] text-gray-400">Width (%)</label>
+                <input
+                  type="number"
+                  value={layout.zoneBounds?.[activeZone]?.w || 100}
+                  className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs"
+                  disabled
+                />
+              </div>
+              <div>
+                <label className="text-[9px] text-gray-400">Height (%)</label>
+                <input
+                  type="number"
+                  value={layout.zoneBounds?.[activeZone]?.h || 100}
+                  className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs"
+                  disabled
+                />
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -481,7 +527,6 @@ function ZoneSettings({ layout, zones, selectedItemId, onRemoveItem, onDurationC
 // ─── Layout Thumbnail Card ────────────────────────────────────────────────────
 
 function LayoutThumbCard({ layoutItem, isSelected, onSelect, onDelete }) {
-  // Use the layout's OWN zones — not global orientation
   const layoutZones = getZonesForLayout(layoutItem.orientation || 'vertical')
   const allItems = Object.values(layoutItem.items || {}).flat()
   const totalDur = allItems.reduce((s, i) => s + (i.duration || 10), 0)
@@ -681,12 +726,10 @@ export default function PlaylistBuilder() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
 
-  // Derived — selected layout and its zones
   const selectedLayout = layouts.find(l => l.id === selectedLayoutId) || layouts[0]
   const selectedOri = selectedLayout?.orientation || orientation
   const selectedLayoutZones = getZonesForLayout(selectedOri)
 
-  // Canvas dimensions based on selected layout orientation
   const isPortrait = selectedOri !== 'horizontal'
   const CANVAS_W = isPortrait ? 240 : 420
   const CANVAS_H = isPortrait ? 427 : 236
@@ -707,7 +750,6 @@ export default function PlaylistBuilder() {
                        : '1fr',
   }
 
-  // ── Initialize empty layout for new playlist ──────────────────────────────
   useEffect(() => {
     if (!id && !initialized) {
       const emptyLayout = makeEmptyLayout('vertical')
@@ -735,7 +777,6 @@ export default function PlaylistBuilder() {
     if (activePanel === 'widgets' && widgetsList.length === 0) fetchWidgets()
   }, [activePanel])
 
-  // ── Fetch playlist ────────────────────────────────────────────────────────
   const fetchPlaylist = async () => {
     setLoading(true)
     try {
@@ -753,18 +794,14 @@ export default function PlaylistBuilder() {
           const layoutOri = layout.orientation || ori
           const layoutZones = getZonesForLayout(layoutOri)
 
-          // Restore zone bounds: stored > canonical
-          const canonicalZoneBounds = Object.fromEntries(layoutZones.map(z => [z.id, z.bounds]))
           let storedZoneBounds = {}
           try {
             const zb = layout.zone_bounds
             if (zb) storedZoneBounds = typeof zb === 'string' ? JSON.parse(zb) : zb
           } catch (e) {}
-          const zoneBounds = { ...canonicalZoneBounds, ...storedZoneBounds }
 
           const layoutItems = itemsByLayout[layout.id] || {}
 
-          // Build items per zone for THIS layout's orientation
           const normalizedItems = {}
           layoutZones.forEach(z => {
             normalizedItems[z.id] = (layoutItems[z.id] || []).map(item => ({
@@ -790,7 +827,7 @@ export default function PlaylistBuilder() {
             width:       layout.width  || 1920,
             height:      layout.height || 1080,
             position:    index,
-            zoneBounds,
+            zoneBounds:  storedZoneBounds,
             items:       normalizedItems,
           }
         })
@@ -809,7 +846,7 @@ export default function PlaylistBuilder() {
 
       setInitialized(true)
     } catch (error) {
-      console.error('❌ Failed to load playlist:', error)
+      console.error('Failed to load playlist:', error)
       toast.error('Failed to load playlist')
     } finally {
       setLoading(false)
@@ -846,8 +883,6 @@ export default function PlaylistBuilder() {
       setLoadingWidgets(false)
     }
   }
-
-  // ── Layout management ─────────────────────────────────────────────────────
 
   const addNewLayout = (layoutOrientation = 'vertical') => {
     const l = makeEmptyLayout(layoutOrientation)
@@ -888,8 +923,6 @@ export default function PlaylistBuilder() {
       setActiveZone(nextZones[0]?.id || 'zone-main')
     }
   }
-
-  // ── Media / Widget add ────────────────────────────────────────────────────
 
   const addMediaToActive = useCallback((media) => {
     const layoutId = selectedLayoutId || layouts[0]?.id
@@ -958,8 +991,6 @@ export default function PlaylistBuilder() {
     }))
   }, [])
 
-  // ── Drag handlers ─────────────────────────────────────────────────────────
-
   const handleDragStart = ({ active }) => setDragActive(active)
 
   const handleDragEnd = useCallback(({ active, over }) => {
@@ -977,8 +1008,6 @@ export default function PlaylistBuilder() {
     }
   }, [addMediaToActive, addWidgetToActive])
 
-  // ── Save ──────────────────────────────────────────────────────────────────
-
   const doSave = async () => {
     if (!name.trim()) { toast.error('Playlist name required'); return null }
 
@@ -988,11 +1017,9 @@ export default function PlaylistBuilder() {
 
       layouts.forEach((layout, layoutIdx) => {
         const layoutZones = getZonesForLayout(layout.orientation || 'vertical')
-        const canonicalZoneBounds = Object.fromEntries(layoutZones.map(z => [z.id, z.bounds]))
-        const resolvedZoneBounds = { ...canonicalZoneBounds, ...(layout.zoneBounds || {}) }
 
         Object.entries(layout.items || {}).forEach(([zoneId, zoneItems]) => {
-          const zoneBounds = resolvedZoneBounds[zoneId] || { x: 0, y: 0, w: 100, h: 100 }
+          const zoneBounds = layout.zoneBounds?.[zoneId] || getZoneBoundsForOrientation(layout.orientation, zoneId)
 
           zoneItems.forEach((item, itemIdx) => {
             const position = (layoutIdx * 1000) + (itemIdx * 10)
@@ -1001,7 +1028,7 @@ export default function PlaylistBuilder() {
               ...(item.widget_config || {}),
               zoneId,
               layoutId:    layout.id,
-              zoneBounds,                                            // zone position 0-100
+              zoneBounds,
               bounds:      item.bounds || { x: 0, y: 0, w: 100, h: 100 },
               mediaName:    item.media_name    || null,
               thumbnailUrl: item.thumbnail_url || null,
@@ -1027,6 +1054,8 @@ export default function PlaylistBuilder() {
         layouts: layouts.map((l, i) => {
           const layoutZones = getZonesForLayout(l.orientation || 'vertical')
           const canonicalZoneBounds = Object.fromEntries(layoutZones.map(z => [z.id, z.bounds]))
+          const mergedZoneBounds = { ...canonicalZoneBounds, ...(l.zoneBounds || {}) }
+          
           return {
             id:          l.id,
             name:        l.name || `Layout ${i + 1}`,
@@ -1034,7 +1063,7 @@ export default function PlaylistBuilder() {
             width:       l.width  || 1920,
             height:      l.height || 1080,
             position:    i,
-            zone_bounds: { ...canonicalZoneBounds, ...(l.zoneBounds || {}) },
+            zone_bounds: mergedZoneBounds,
           }
         }),
       }
@@ -1052,7 +1081,7 @@ export default function PlaylistBuilder() {
       toast.success(id ? 'Playlist updated!' : 'Playlist created!')
       return finalId
     } catch (err) {
-      console.error('❌ Save failed:', err)
+      console.error('Save failed:', err)
       toast.error(err?.response?.data?.message || 'Failed to save')
       return null
     } finally {
@@ -1066,8 +1095,6 @@ export default function PlaylistBuilder() {
     if (savedId) navigate(`/playlists/${savedId}/publish`)
   }
 
-  // ── Loading screen ────────────────────────────────────────────────────────
-
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -1075,8 +1102,6 @@ export default function PlaylistBuilder() {
       </div>
     )
   }
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <DndContext
@@ -1087,10 +1112,8 @@ export default function PlaylistBuilder() {
     >
       <div className="h-screen flex flex-col" style={{ background: '#e8f0fe' }}>
 
-        {/* ── Header ── */}
         <header className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800 flex-shrink-0 z-20" style={{ minHeight: 48 }}>
 
-          {/* Left: Exit + playlist name */}
           <div className="flex items-center gap-2">
             <Link to="/playlists">
               <button className="px-4 py-1.5 bg-red-500 text-white text-xs font-bold rounded-full hover:bg-red-600 transition-colors">
@@ -1118,7 +1141,6 @@ export default function PlaylistBuilder() {
             )}
           </div>
 
-          {/* Center: per-layout zone orientation picker + New Layout */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400 font-medium">Layout zones:</span>
             {[
@@ -1151,7 +1173,6 @@ export default function PlaylistBuilder() {
             </button>
           </div>
 
-          {/* Right: Read Docs + Preview + Save + Next */}
           <div className="flex items-center gap-2">
             <button className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-full hover:bg-blue-700 transition-colors">
               <BookOpenCheck size={12} />Read Docs
@@ -1194,13 +1215,10 @@ export default function PlaylistBuilder() {
           </div>
         </header>
 
-        {/* ── Body ── */}
         <div className="flex-1 flex overflow-hidden">
 
-          {/* ── Left Panel ── */}
           <aside className="flex flex-col bg-white border-r border-gray-200 flex-shrink-0" style={{ width: 380 }}>
 
-            {/* Tab row */}
             <div className="flex items-center border-b border-gray-200 bg-white px-3 pt-3 pb-0 gap-1">
               {[
                 { k: 'media',     l: 'Media' },
@@ -1219,7 +1237,6 @@ export default function PlaylistBuilder() {
               ))}
             </div>
 
-            {/* Search + Upload */}
             <div className="flex items-center gap-2 p-2.5 border-b border-gray-100">
               <div className="relative flex-1">
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -1236,7 +1253,6 @@ export default function PlaylistBuilder() {
               </button>
             </div>
 
-            {/* Media type filter */}
             {activePanel === 'media' && (
               <div className="flex items-center justify-between gap-1 px-2.5 py-2 border-b border-gray-100">
                 <div className="flex items-center gap-1">
@@ -1261,7 +1277,6 @@ export default function PlaylistBuilder() {
               </div>
             )}
 
-            {/* Panel content */}
             <div className="flex-1 overflow-y-auto p-2.5">
               {activePanel === 'media' && (
                 loadingMedia ? (
@@ -1310,7 +1325,6 @@ export default function PlaylistBuilder() {
             </div>
           </aside>
 
-          {/* ── Center Canvas ── */}
           <main
             className="flex-1 flex flex-col overflow-hidden"
             style={{ background: '#e8f0fe' }}
@@ -1318,7 +1332,6 @@ export default function PlaylistBuilder() {
           >
             <div className="flex-1 overflow-auto flex flex-col items-center pb-6">
 
-              {/* Canvas top controls */}
               <div className="flex items-center gap-2 mt-5 mb-3">
                 <button className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 text-white text-xs font-bold rounded-full hover:bg-blue-600 transition-colors shadow-sm">
                   <Maximize size={11} />Full Screen
@@ -1331,7 +1344,6 @@ export default function PlaylistBuilder() {
                 </button>
               </div>
 
-              {/* Canvas — uses selectedLayoutZones (per-layout) */}
               <div
                 ref={canvasRef}
                 style={{ width: CANVAS_W, height: CANVAS_H, ...canvasGridStyle }}
@@ -1365,7 +1377,6 @@ export default function PlaylistBuilder() {
                 })}
               </div>
 
-              {/* Layout cards row — each card uses its OWN zones */}
               <div className="flex items-start gap-3 mt-6 px-4 flex-wrap justify-center">
                 {layouts.map(layoutItem => (
                   <LayoutThumbCard
@@ -1381,7 +1392,6 @@ export default function PlaylistBuilder() {
                   />
                 ))}
 
-                {/* Add layout card */}
                 <button
                   onClick={() => addNewLayout('vertical')}
                   className="flex-shrink-0 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-2xl bg-white/60 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer group"
@@ -1396,7 +1406,6 @@ export default function PlaylistBuilder() {
             </div>
           </main>
 
-          {/* ── Right Panel ── */}
           <aside className="flex flex-col bg-white border-l border-gray-200 flex-shrink-0" style={{ width: 340 }}>
             <div className="flex items-center px-4 py-3 border-b border-gray-100 bg-gray-50">
               <h3 className="text-sm font-bold text-gray-800">Zone Settings</h3>
@@ -1407,7 +1416,6 @@ export default function PlaylistBuilder() {
               )}
             </div>
 
-            {/* Zone tab selector — shows zones for selected layout */}
             {selectedLayout && selectedLayoutZones.length > 1 && (
               <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-100 overflow-x-auto">
                 {selectedLayoutZones.map(zone => (
@@ -1438,14 +1446,12 @@ export default function PlaylistBuilder() {
         </div>
       </div>
 
-      {/* Preview Modal */}
       <PreviewModal
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
         layouts={layouts}
       />
 
-      {/* Drag Overlay */}
       <DragOverlay>
         {dragActive && (
           <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-blue-500 shadow-2xl bg-white">
@@ -1458,8 +1464,7 @@ export default function PlaylistBuilder() {
             )}
           </div>
         )}
-      {/* </DragOverlay> */}
-         </DragOverlay>
+      </DragOverlay>
     </DndContext>
   )
 }

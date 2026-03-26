@@ -637,24 +637,24 @@ const getFullPlaylistData = async (playlistId, orgId) => {
 function getCanonicalZoneBounds(orientation, zoneId) {
   const presets = {
     'vertical': {
-      'zone-main':          { x: 0,  y: 0,  w: 100, h: 100 },
+      'zone-main': { x: 0, y: 0, w: 100, h: 100 },
     },
     'horizontal': {
-      'zone-left':          { x: 0,  y: 0,  w: 50,  h: 100 },
-      'zone-right':         { x: 50, y: 0,  w: 50,  h: 100 },
+      'zone-left': { x: 0, y: 0, w: 50, h: 100 },
+      'zone-right': { x: 50, y: 0, w: 50, h: 100 },
     },
     'top-bottom': {
-      'zone-top':           { x: 0,  y: 0,  w: 100, h: 50  },
-      'zone-bottom':        { x: 0,  y: 50, w: 100, h: 50  },
+      'zone-top': { x: 0, y: 0, w: 100, h: 50 },
+      'zone-bottom': { x: 0, y: 50, w: 100, h: 50 },
     },
     'custom': {
-      'zone-top':           { x: 0,  y: 0,  w: 100, h: 50  },
-      'zone-bottom-left':   { x: 0,  y: 50, w: 50,  h: 50  },
-      'zone-bottom-right':  { x: 50, y: 50, w: 50,  h: 50  },
+      'zone-top': { x: 0, y: 0, w: 100, h: 50 },
+      'zone-bottom-left': { x: 0, y: 50, w: 50, h: 50 },
+      'zone-bottom-right': { x: 50, y: 50, w: 50, h: 50 },
     },
     'pip': {
-      'zone-main':          { x: 0,  y: 0,  w: 100, h: 100 },
-      'zone-pip':           { x: 65, y: 60, w: 30,  h: 35  },
+      'zone-main': { x: 0, y: 0, w: 100, h: 100 },
+      'zone-pip': { x: 65, y: 60, w: 30, h: 35 },
     },
   }
 
@@ -665,62 +665,56 @@ function getCanonicalZoneBounds(orientation, zoneId) {
 
   // Cross-orientation fallbacks — common zone IDs regardless of orientation
   const globalFallbacks = {
-    'zone-main':          { x: 0,  y: 0,  w: 100, h: 100 },
-    'zone-top':           { x: 0,  y: 0,  w: 100, h: 50  },
-    'zone-bottom':        { x: 0,  y: 50, w: 100, h: 50  },
-    'zone-left':          { x: 0,  y: 0,  w: 50,  h: 100 },
-    'zone-right':         { x: 50, y: 0,  w: 50,  h: 100 },
-    'zone-bottom-left':   { x: 0,  y: 50, w: 50,  h: 50  },
-    'zone-bottom-right':  { x: 50, y: 50, w: 50,  h: 50  },
-    'zone-pip':           { x: 65, y: 60, w: 30,  h: 35  },
+    'zone-main': { x: 0, y: 0, w: 100, h: 100 },
+    'zone-top': { x: 0, y: 0, w: 100, h: 50 },
+    'zone-bottom': { x: 0, y: 50, w: 100, h: 50 },
+    'zone-left': { x: 0, y: 0, w: 50, h: 100 },
+    'zone-right': { x: 50, y: 0, w: 50, h: 100 },
+    'zone-bottom-left': { x: 0, y: 50, w: 50, h: 50 },
+    'zone-bottom-right': { x: 50, y: 50, w: 50, h: 50 },
+    'zone-pip': { x: 65, y: 60, w: 30, h: 35 },
   }
 
   return globalFallbacks[zoneId] || { x: 0, y: 0, w: 100, h: 100 }
 }
 
-/** Readable name for a zone ID */
 function resolveZoneName(zoneId) {
   const map = {
-    'zone-main':          'Main Zone',
-    'zone-left':          'Left Zone',
-    'zone-right':         'Right Zone',
-    'zone-top':           'Top Zone',
-    'zone-bottom':        'Bottom Zone',
-    'zone-bottom-left':   'Bottom Left Zone',
-    'zone-bottom-right':  'Bottom Right Zone',
-    'zone-pip':           'PIP Zone',
+    'zone-main': 'Main Zone',
+    'zone-left': 'Left Zone',
+    'zone-right': 'Right Zone',
+    'zone-top': 'Top Zone',
+    'zone-bottom': 'Bottom Zone',
+    'zone-bottom-left': 'Bottom Left Zone',
+    'zone-bottom-right': 'Bottom Right Zone',
+    'zone-pip': 'PIP Zone',
   }
   return map[zoneId] || String(zoneId)
 }
 
-/** 0–100 percentage → 0.000000 float (APK expects 6 decimal precision) */
 function pctToFloat(value) {
   if (value == null) return 0.0
   const n = parseFloat(value)
   if (isNaN(n)) return 0.0
-  // If already in 0–1 range (someone passed a float), keep it
-  // If in 0–100 range (percentage), divide by 100
   return parseFloat((n > 1 ? n / 100 : n).toFixed(6))
 }
 
-/** APK mediaType string */
 function resolveMediaType(item) {
   if (item.widget_type && item.widget_type !== 'media') return item.widget_type
   const rt = (item.resource_type || '').toLowerCase()
   if (rt === 'video') return 'video'
   if (rt === 'image') return 'image'
-  if (rt === 'raw')   return 'document'
+  if (rt === 'raw') return 'document'
   const url = (item.secure_url || '').toLowerCase()
-  if (/\.(mp4|mov|avi|mkv|webm)(\?|$)/.test(url))      return 'video'
+  if (/\.(mp4|mov|avi|mkv|webm)(\?|$)/.test(url)) return 'video'
   if (/\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/.test(url)) return 'image'
   return 'unknown'
 }
 
-/** Zone-level content type for APK */
 function resolveZoneContentType(items) {
   if (!items?.length) return 'unknown'
   const pureMedia = ['video', 'image', 'unknown', 'document']
-  const types     = items.map(resolveMediaType)
+  const types = items.map(resolveMediaType)
   if (types.some(t => !pureMedia.includes(t))) return 'widget'
   const unique = [...new Set(types)]
   if (unique.length === 1 && unique[0] === 'video') return 'video'
@@ -728,7 +722,6 @@ function resolveZoneContentType(items) {
   return 'mixed'
 }
 
-/** Layout duration = longest zone's total duration (ms) */
 function calcLayoutDurationMs(zonesMap) {
   let max = 0
   Object.values(zonesMap).forEach(items => {
@@ -738,79 +731,111 @@ function calcLayoutDurationMs(zonesMap) {
   return max || 10000
 }
 
-/** orientation → APK uiRotation integer */
 function resolveRotation(layout) {
   const o = (layout.orientation || '').toLowerCase()
-  if (o === 'portrait')          return 90
-  if (o === 'portrait_reverse')  return 270
+  if (o === 'portrait') return 90
+  if (o === 'portrait_reverse') return 270
   if (o === 'landscape_reverse') return 180
   return 0
 }
 
+function normalizeItemRow(row) {
+  const wConfig = parseJsonField(row.widget_config, {})
+  return {
+    id: row.id,
+    playlist_id: row.playlist_id,
+    media_id: row.media_id,
+    widget_id: row.widget_id,
+    widget_type: row.widget_type || row.widget_type_from_table || null,
+    widget_config: wConfig,
+    item_type: row.item_type || (row.widget_type ? 'widget' : 'media'),
+    position: row.position,
+    duration: row.duration,
+    is_active: row.is_active,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    layout_id: wConfig.layoutId || null,
+    zone_id: wConfig.zoneId || 'zone-main',
+    zone_bounds: wConfig.zoneBounds || null,
+    bounds: wConfig.bounds || { x: 0, y: 0, w: 100, h: 100 },
+    media_name: row.media_name || wConfig.mediaName || null,
+    secure_url: row.secure_url || wConfig.secureUrl || null,
+    thumbnail_url: row.thumbnail_url || wConfig.thumbnailUrl || null,
+    resource_type: row.resource_type || wConfig.resourceType || null,
+    format: row.format || null,
+    media_duration: row.media_duration || null,
+    width: row.media_width || null,
+    height: row.media_height || null,
+  }
+}
+
+function buildItemsByLayout(rows, layouts) {
+  const defaultLayoutId = layouts[0]?.id || 'default'
+  const itemsByLayout = {}
+  layouts.forEach(layout => { itemsByLayout[layout.id] = {} })
+
+  rows.forEach(row => {
+    const item = normalizeItemRow(row)
+    const layoutId = item.layout_id || defaultLayoutId
+    const zoneId = item.zone_id || 'zone-main'
+
+    if (!itemsByLayout[layoutId]) itemsByLayout[layoutId] = {}
+    if (!itemsByLayout[layoutId][zoneId]) itemsByLayout[layoutId][zoneId] = []
+
+    itemsByLayout[layoutId][zoneId].push({
+      id: item.id,
+      media_id: item.media_id,
+      widget_id: item.widget_id,
+      widget_type: item.widget_type,
+      widget_config: item.widget_config,
+      item_type: item.item_type,
+      position: item.position,
+      duration: item.duration,
+      bounds: item.bounds,
+      zone_bounds: item.zone_bounds,
+      media_name: item.media_name,
+      secure_url: item.secure_url,
+      thumbnail_url: item.thumbnail_url,
+      resource_type: item.resource_type,
+      format: item.format,
+      media_duration: item.media_duration,
+      width: item.width,
+      height: item.height,
+      media: item.media_id ? {
+        id: item.media_id,
+        name: item.media_name,
+        secure_url: item.secure_url,
+        thumbnail_url: item.thumbnail_url,
+        resource_type: item.resource_type,
+        format: item.format,
+        duration: item.media_duration,
+        width: item.width,
+        height: item.height,
+      } : null,
+    })
+  })
+
+  Object.values(itemsByLayout).forEach(zones =>
+    Object.values(zones).forEach(zoneItems =>
+      zoneItems.sort((a, b) => a.position - b.position)
+    )
+  )
+  return itemsByLayout
+}
+
 // =============================================================================
-// buildPlayablePayload
+// buildPlayablePayload - APK Payload Builder
 // =============================================================================
-//
-// Produces EXACTLY the format the APK expects:
-//
-// {
-//   "type": "playable_data",
-//   "data": {
-//     "playlistObjectArrayList": [{
-//       "playlistId": "24",
-//       "playlistName": "...",
-//       "isLoop": true,
-//       "transitionType": "none",
-//       "totalDuration": 30000,
-//       "layoutObjectArrayList": [
-//         {
-//           "layoutId": "split-layout-1",
-//           "layoutName": "Split Layout - Top/Bottom",
-//           "layoutDuration": 20000,
-//           "uiRotation": 0,
-//           "zoneObjectArrayList": [
-//             {
-//               "zoneId": "zone-top",
-//               "zoneName": "Top Zone",
-//               "zoneContentType": "video",
-//               "zoneConfig": {
-//                 "zoneWidth": 1.0,
-//                 "zoneHeight": 0.5,
-//                 "zonePositionX": 0.0,
-//                 "zonePositionY": 0.0,
-//                 "zonePositionZ": 0.0
-//               },
-//               "sequenceObject": {
-//                 "sequenceId": "seq-split-layout-1-zone-top",
-//                 "sequenceName": "Sequence Top Zone",
-//                 "mediaItems": [{ ... }]
-//               },
-//               "sequenceScheduleDataObjectArrayList": null,
-//               "sequenceTriggerDataObjectArrayList": null
-//             }
-//           ],
-//           "layoutScheduleDataObjectArrayList": null,
-//           "layoutTriggerDataObjectArrayList": null
-//         }
-//       ],
-//       "layoutScheduleDataObjectArrayList": null,
-//       "layoutTriggerDataObjectArrayList": null
-//     }],
-//     "scheduleDataObjectArrayList": null
-//   }
-// }
-//
 function buildPlayablePayload(playlistData, version) {
-  const layouts       = playlistData.layouts        || []
+  const layouts = playlistData.layouts || []
   const itemsByLayout = playlistData.items_by_layout || {}
 
   // ── Build layoutObjectArrayList ──────────────────────────────────────────
   const layoutObjectArrayList = layouts.map((layout, layoutIndex) => {
     const orientation = layout.orientation || 'vertical'
-    const zonesMap    = itemsByLayout[layout.id] || {}
+    const zonesMap = itemsByLayout[layout.id] || {}
 
     // ── Resolve stored zone_bounds for this layout ──────────────────────
-    // Layout-level zone_bounds (saved by frontend doSave)
     let storedLayoutZoneBounds = {}
     try {
       const zb = layout.zone_bounds
@@ -818,17 +843,11 @@ function buildPlayablePayload(playlistData, version) {
     } catch (_) {}
 
     // ── Build zoneObjectArrayList ───────────────────────────────────────
-    // Only include zones that have at least one media item
     const zoneObjectArrayList = Object.entries(zonesMap)
       .filter(([, zoneItems]) => Array.isArray(zoneItems) && zoneItems.length > 0)
       .map(([zoneId, zoneItems]) => {
 
         // ── Resolve zone bounds — 3-level priority ──────────────────────
-        //
-        // Level 1 (highest): item's widgetConfig.zoneBounds (set when frontend saves)
-        // Level 2          : layout.zone_bounds[zoneId]     (set when frontend saves)
-        // Level 3 (lowest) : getCanonicalZoneBounds()       (orientation preset)
-        //
         let zoneBounds = null
 
         // Level 1: first item's stored zoneBounds
@@ -861,37 +880,35 @@ function buildPlayablePayload(playlistData, version) {
 
         // ── Build mediaItems array ────────────────────────────────────────
         const mediaItems = zoneItems.map((item, itemIdx) => ({
-          mediaId:         String(item.media_id || item.id || `item-${itemIdx}`),
-          mediaName:       item.media_name || item.widget_type || `item-${itemIdx}`,
-          mediaType:       resolveMediaType(item),
+          mediaId: String(item.media_id || item.id || `item-${itemIdx}`),
+          mediaName: item.media_name || item.widget_type || `item-${itemIdx}`,
+          mediaType: resolveMediaType(item),
           mediaRemotePath: item.secure_url || item.widget_config?.secureUrl || null,
-          mediaDuration:   (item.duration || 10) * 1000,   // seconds → milliseconds
-          mediaLocalPath:  null,
+          mediaDuration: (item.duration || 10) * 1000,
+          mediaLocalPath: null,
         }))
 
         // ── Build zoneConfig with precise float values ────────────────────
         const zoneConfig = {
-          zoneWidth:     pctToFloat(zoneBounds.w),   // e.g. 100 → 1.0,  50 → 0.5
-          zoneHeight:    pctToFloat(zoneBounds.h),   // e.g. 50  → 0.5
-          zonePositionX: pctToFloat(zoneBounds.x),   // e.g. 0   → 0.0,  50 → 0.5
-          zonePositionY: pctToFloat(zoneBounds.y),   // e.g. 50  → 0.5
+          zoneWidth: pctToFloat(zoneBounds.w),
+          zoneHeight: pctToFloat(zoneBounds.h),
+          zonePositionX: pctToFloat(zoneBounds.x),
+          zonePositionY: pctToFloat(zoneBounds.y),
           zonePositionZ: 0.0,
         }
 
-        console.log(`[PAYLOAD] Layout "${layout.name}" Zone "${zoneId}":`, JSON.stringify(zoneConfig))
-
         return {
-          zoneId:          String(zoneId),
-          zoneName:        resolveZoneName(zoneId),
+          zoneId: String(zoneId),
+          zoneName: resolveZoneName(zoneId),
           zoneContentType: resolveZoneContentType(zoneItems),
           zoneConfig,
           sequenceObject: {
-            sequenceId:   `seq-${layout.id}-${zoneId}`,
+            sequenceId: `seq-${layout.id}-${zoneId}`,
             sequenceName: `Sequence ${resolveZoneName(zoneId)}`,
             mediaItems,
           },
           sequenceScheduleDataObjectArrayList: null,
-          sequenceTriggerDataObjectArrayList:  null,
+          sequenceTriggerDataObjectArrayList: null,
         }
       })
 
@@ -899,19 +916,19 @@ function buildPlayablePayload(playlistData, version) {
     const layoutDuration = calcLayoutDurationMs(zonesMap)
 
     return {
-      layoutId:       String(layout.id),
-      layoutName:     layout.name || `Layout ${layoutIndex + 1}`,
+      layoutId: String(layout.id),
+      layoutName: layout.name || `Layout ${layoutIndex + 1}`,
       layoutDuration,
-      uiRotation:     resolveRotation(layout),
+      uiRotation: resolveRotation(layout),
       zoneObjectArrayList,
       layoutScheduleDataObjectArrayList: null,
-      layoutTriggerDataObjectArrayList:  null,
+      layoutTriggerDataObjectArrayList: null,
     }
   })
 
   // ── Total playlist duration = sum of all layout durations ─────────────────
-  const totalDuration = layoutObjectArrayList.reduce((s, l) => s + l.layoutDuration, 0)
-    || (playlistData.total_duration || 0) * 1000
+  const totalDuration = layoutObjectArrayList.reduce((s, l) => s + l.layoutDuration, 0) ||
+    (playlistData.total_duration || 0) * 1000
 
   // ── Root envelope ─────────────────────────────────────────────────────────
   return {
@@ -919,20 +936,21 @@ function buildPlayablePayload(playlistData, version) {
     data: {
       playlistObjectArrayList: [
         {
-          playlistId:    String(playlistData.id),
-          playlistName:  playlistData.name,
-          isLoop:        playlistData.is_loop !== false,
+          playlistId: String(playlistData.id),
+          playlistName: playlistData.name,
+          isLoop: playlistData.is_loop !== false,
           transitionType: playlistData.transition_type || 'none',
           totalDuration,
           layoutObjectArrayList,
           layoutScheduleDataObjectArrayList: null,
-          layoutTriggerDataObjectArrayList:  null,
+          layoutTriggerDataObjectArrayList: null,
         }
       ],
       scheduleDataObjectArrayList: null,
     },
   }
 }
+
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 module.exports = {
